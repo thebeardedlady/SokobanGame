@@ -36,6 +36,7 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 typedef s32 b32;
+typedef s32 ixy;
 
 typedef float r32;
 typedef double r64;
@@ -56,6 +57,13 @@ inline s32
 Sign(s32 A)
 {
 	s32 Result = A > 0 ? 1 : (A < 0 ? -1 : 0);
+	return Result;
+}
+
+inline r32
+Sign(r32 A)
+{
+	r32 Result = A > 0.0f ? 1.0f : (A < 0.0f ? -1.0f : 0.0f);
 	return Result;
 }
 
@@ -163,6 +171,381 @@ inline r32
 FMod(r32 Num,r32 Mod)
 {
 	r32 Result = Fractional(Num / Mod) * Mod;
+	return Result;
+}
+
+union i2 {
+	struct {
+		s32 X;
+		s32 Y;
+	};
+	s32 E[2];
+};
+
+
+inline i2
+operator+(i2 A, i2 B)
+{
+	i2 Result;
+	Result.X = A.X + B.X;
+	Result.Y = A.Y + B.Y;
+	return Result;
+}
+
+inline i2
+operator-(i2 A, i2 B)
+{
+	i2 Result;
+	Result.X = A.X - B.X;
+	Result.Y = A.Y - B.Y;
+	return Result;
+}
+
+inline i2
+operator-(i2 A)
+{
+	i2 Result;
+	Result.X = -A.X;
+	Result.Y = -A.Y;
+	return Result;
+}
+
+inline i2
+operator*(s32 A, i2 B)
+{
+	i2 Result;
+	Result.X = A * B.X;
+	Result.Y = A * B.Y;
+	return Result;
+}
+
+inline i2
+operator*(i2 A, s32 B)
+{
+	i2 Result;
+	Result.X = A.X * B;
+	Result.Y = A.Y * B;
+	return Result;
+}
+
+inline i2
+operator/(i2 A, s32 B)
+{
+	i2 Result;
+	Result.X = A.X / B;
+	Result.Y = A.Y / B;
+	return Result;
+}
+
+inline b32
+operator==(i2 A, i2 B)
+{
+	b32 Result = (A.X == B.X) && (A.Y == B.Y);
+	return Result;
+}
+
+inline b32
+operator!=(i2 A, i2 B)
+{
+	b32 Result = (A.X != B.X) || (A.Y != B.Y);
+	return Result;
+}
+
+inline i2
+operator+=(i2 A, i2 B)
+{
+	i2 Result;
+	Result.X = A.X + B.X;
+	Result.Y = A.Y + B.Y;
+	return Result;
+}
+
+inline i2
+operator-=(i2 A, i2 B)
+{
+	i2 Result;
+	Result.X = A.X - B.X;
+	Result.Y = A.Y - B.Y;
+	return Result;
+}
+
+inline i2
+I2(s32 X, s32 Y)
+{
+	i2 Result;
+	Result.X = X;
+	Result.Y = Y;
+	return Result;
+}
+
+inline s32
+Inner(i2 A, i2 B)
+{
+	s32 Result = (A.X * B.X) + (A.Y * B.Y);
+	return Result;
+}
+
+inline s32
+LengthSq(i2 A)
+{
+	s32 Result = Inner(A, A);
+	return Result;
+}
+
+inline s32
+TLength(i2 A)
+{
+	s32 Result = Abs(A.X)+Abs(A.Y);
+	return Result;
+}
+
+inline s32
+CLength(i2 A)
+{
+	s32 Result = Max(Abs(A.X), Abs(A.Y));
+	return Result;
+}
+
+inline s32
+DistanceSq(i2 A, i2 B)
+{
+	s32 Result = LengthSq(A - B);
+	return Result;
+}
+
+inline s32
+TDistance(i2 A, i2 B)
+{
+	s32 Result = TLength(A - B);
+	return Result;
+}
+
+inline s32
+CDistance(i2 A, i2 B)
+{
+	s32 Result = CLength(A - B);
+	return Result;
+}
+
+
+//TODO(ian): test this!!!!
+inline s32
+GetAngle(i2 A)
+{
+	s32 Result;
+
+	if (A.X == 0) //Vertical Line
+	{
+		if (A.Y > 0)
+		{
+			Result = 2;
+		}
+		else if(A.Y < 0)
+		{
+			Result = 6;
+		}
+		else
+		{
+			printf("\nERROR: Trying to get the angle of the zero vector");
+		}
+	}
+	else
+	{
+		s32 M = A.Y / A.X;
+		if (M >= 0)
+		{
+			if (M <= 1)
+			{
+				Result = M;
+			}
+			else
+			{
+				Result = 2;
+			}
+			if (A.X > 0)
+			{
+			}
+			else
+			{
+				Result += 4;
+			}
+		}
+		else
+		{
+			if (M >= -1)
+			{
+				Result = M;
+			}
+			else
+			{
+				Result = -2;
+			}
+			if (A.X > 0)
+			{
+				Result += 8;
+			}
+			else
+			{
+				Result += 4;
+			}
+		}
+	}
+	return Result;
+}
+
+inline s32
+KeepMetricAngleInRange(s32 Angle)
+{
+	s32 Result;
+	if (Angle >= 0)
+	{
+		Result = Angle % 8;
+	}
+	else
+	{
+		Result = 8 - ((-Angle) % 8);
+	}
+
+	return Result;
+}
+
+//NOTE(ian): Assumes the angle is between 0 and 8
+inline s32
+TSine(s32 Angle)
+{
+	s32 Result;
+	if (Angle >= 0 && Angle < 2)
+	{
+		Result = Angle/2;
+	}
+	else if (Angle >= 2 && Angle < 6)
+	{
+		Result = 2 - Angle / 2;
+	}
+	else
+	{
+		Result = -4 + Angle / 2;
+	}
+	return Result;
+}
+
+//NOTE(ian): Assumes the angle is between 0 and 8
+inline s32
+TCosine(s32 Angle)
+{
+	s32 Result;
+	if (Angle >= 0 && Angle < 4)
+	{
+		Result = 1 - Angle / 2;
+	}
+	else
+	{
+		Result = -3 + Angle / 2;
+	}
+	return Result;
+}
+
+
+
+//NOTE(ian): Assumes the angle is between 0 and 8
+inline s32
+CSine(s32 Angle)
+{
+	r32 Result;
+	if (Angle < 1)
+	{
+		Result = Angle;
+	}
+	else if (Angle < 3)
+	{
+		Result = 1;
+	}
+	else if (Angle < 5)
+	{
+		Result = 4 - Angle;
+	}
+	else if (Angle < 7)
+	{
+		Result = -1;
+	}
+	else
+	{
+		Result = Angle - 8;
+	}
+
+	return Result;
+}
+
+
+//NOTE(ian): Assumes the angle is between 0 and 8
+inline s32
+CCosine(s32 Angle)
+{
+	s32 Result;
+	if (Angle < 1)
+	{
+		Result = 1;
+	}
+	else if (Angle < 3)
+	{
+		Result = 2 - Angle;
+	}
+	else if (Angle < 5)
+	{
+		Result = -1;
+	}
+	else if (Angle < 7)
+	{
+		Result = Angle - 6;
+	}
+	else
+	{
+		Result = 1;
+	}
+
+	return Result;
+}
+
+
+
+inline i2
+ComplexMult(i2 A, i2 B)
+{
+	i2 Result;
+	Result.X = A.X*B.X - A.Y * B.Y;
+	Result.Y = A.X*B.Y + A.Y * B.X;
+	return Result;
+}
+
+inline i2
+Hadamard(i2 A, i2 B)
+{
+	i2 Result;
+	Result.X = A.X * B.X;
+	Result.Y = A.Y * B.Y;
+	return Result;
+}
+
+inline i2
+HadamardDiv(i2 A, i2 B)
+{
+	i2 Result;
+	Result.X = A.X / B.X;
+	Result.Y = A.Y / B.Y;
+	return Result;
+}
+
+inline s32
+Cross(i2 A, i2 B)
+{
+	s32 Result = A.X * B.Y - A.Y * B.X;
+	return Result;
+}
+
+inline i2
+Perp(i2 A)
+{
+	i2 Result = { -A.Y,A.X };
 	return Result;
 }
 
@@ -1217,7 +1600,8 @@ ExpandRect(r2 Rect, v2 Point)
 	return Result;
 }
 
-inline r2 MultiplePoints(v2* Points, u32 Num)
+inline r2 
+MultiplePoints(v2* Points, u32 Num)
 {
 	r2 Result = TwoPoints(Points[0], Points[1]);
 
@@ -1925,7 +2309,8 @@ enum block_type {
 	SPIKE,
 	CRATE,
 	SOUL,
-	CREATURE
+	CREATURE,
+	HINGE
 };
 
 enum block_attributes {
@@ -1933,12 +2318,17 @@ enum block_attributes {
 	ACCEPTS_INPUT = 1,
 	MOVABLE = 2,
 	STATIONARY = 4,
-	ROTATABLE = 8,
-	STICKS_TO_WALLS = 16,
-	STICKS_TO_SPIKES = 32,
-	STICKS_TO_PLAYER = 64,
-	STICKS_TO_CRATES = 128,
-	STICKS_TO_CREATURES = 256
+	FLOATING = 8,
+	ROTATABLE = 16,
+	ABLE_TO_FALL = 32,
+	IMMEDIATE_FOOTING_ONLY = 64,
+	STICKS_TO_WALLS = 128,
+	STICKS_TO_SPIKES = 256,
+	LINKS_TO_PLAYER = 512,
+	LINKS_TO_CRATES = 1024,
+	LINKS_TO_CREATURES = 2048,
+	LINKS_TO_HINGES = 4096,
+	STICKS_TO_HINGES = 8192
 };
 
 typedef struct {
@@ -1965,10 +2355,12 @@ enum movement_direction {
 	RIGHT = 8
 };
 
+/*
 enum groundedness {
 	FLOATING,
 	STANDING
 };
+*/
 
 union mechanical_state{
 	u32 Flags;
@@ -2008,7 +2400,7 @@ typedef struct {
 
 //TODO(ian): Change this; think of a smarter way to do capture the essence of a block!!!
 typedef struct {
-	v2 Move;
+	i2 Move;
 	block_properties Properties;
 } block;
 
@@ -2091,13 +2483,13 @@ InitializeSpikeProperties()
 inline block_properties
 InitializeCreatureProperties()
 {
-	return block_properties{ CREATURE,STICKS_TO_SPIKES | STICKS_TO_CREATURES | STICKS_TO_WALLS | MOVABLE };
+	return block_properties{ CREATURE,STICKS_TO_SPIKES | LINKS_TO_CREATURES | STICKS_TO_WALLS | MOVABLE };
 }
 
 inline block_properties
 InitializePlayerProperties()
 {
-	return block_properties{ PLAYER,ACCEPTS_INPUT | STICKS_TO_CRATES | STICKS_TO_WALLS | MOVABLE };
+	return block_properties{ PLAYER,ACCEPTS_INPUT | LINKS_TO_CRATES | STICKS_TO_WALLS | MOVABLE | STICKS_TO_HINGES | ABLE_TO_FALL | IMMEDIATE_FOOTING_ONLY};
 }
 
 inline block_properties
@@ -2109,7 +2501,13 @@ InitializeWallProperties()
 inline block_properties
 InitializeCrateProperties()
 {
-	return block_properties{ CRATE,STICKS_TO_CRATES | STICKS_TO_WALLS | MOVABLE };
+	return block_properties{ CRATE,LINKS_TO_CRATES | STICKS_TO_WALLS | STICKS_TO_HINGES | MOVABLE | ABLE_TO_FALL};
+}
+
+inline block_properties
+InitializeHingeProperties()
+{
+	return block_properties{ HINGE,FLOATING | MOVABLE | LINKS_TO_HINGES };
 }
 
 inline b32
@@ -2155,6 +2553,12 @@ IsPlayer(block_properties Properties)
 	return Result;
 }
 
+inline b32
+IsHinge(block_properties Properties)
+{
+	b32 Result = (Properties.Type == HINGE);
+	return Result;
+}
 
 
 
@@ -2291,6 +2695,51 @@ RestartTurn(block *Grid, block_properties* PreviousState, u32*TotalStateBytes, u
 #define MAXMOVEABLES 20
 
 internal b32
+AlreadyTagged(u32* Indices, u32 NumIndices, u32 Index)
+{
+	b32 Checked = false;
+	for (u32 K = 0;
+		K < NumIndices;
+		++K)
+	{
+		if (Index == Indices[K])
+		{
+			Checked = true;
+			break;
+		}
+	}
+	return Checked;
+}
+
+
+internal void
+TagType(block* Grid, u32* Indices, u32* NumIndices, s32 X, s32 Y, u32 Type)
+{
+	for (s32 I = -1;
+		I < 2;
+		++I)
+	{
+		for (s32 J = -1;
+			J < 2;
+			++J)
+		{
+			u32 Index = (u32)((Y + I)*LEVELWIDTH + X + J);
+			block SurroundingCell = Grid[Index];
+			if (SurroundingCell.Properties.Type == Type)
+			{
+				if (!AlreadyTagged(Indices, *NumIndices, Index))
+				{
+					Indices[(*NumIndices)++] = Index;
+					TagType(Grid, Indices, NumIndices, X + J, Y + I, Type);
+				}
+			}
+		}
+	}
+}
+
+
+
+internal b32
 DetermineStickiness(block* Grid, u32* Indices, u32* NumIndices, u32 X, u32 Y)
 {
 	b32 NoFall = false;
@@ -2311,7 +2760,7 @@ DetermineStickiness(block* Grid, u32* Indices, u32* NumIndices, u32 X, u32 Y)
 				NoFall = true;
 				break;
 			}
-			else if (IsCrate(SurroundingCell.Properties))
+			else if (IsCrate(SurroundingCell.Properties))// || IsCreature(SurroundingCell.Properties))
 			{
 				b32 Checked = false;
 				for (u32 K = 0;
@@ -2400,12 +2849,13 @@ DetermineLinking(block* Grid, u32* Indices, u32* NumIndices, u32 X, u32 Y)
 	return NoFall;
 }
 
+
 internal b32
 DetermineFooting(block* Grid, u32* Indices, u32* NumIndices, u32 X, u32 Y)
 {
 	b32 NoFall = false;
 	u32 PrimaryIndex = (Y + 1)*LEVELWIDTH + X;
-	if (AreBitsSet(Grid[PrimaryIndex].Properties.Attributes, STATIONARY) || IsPlayer(Grid[PrimaryIndex].Properties))
+	if (AreBitsSet(Grid[PrimaryIndex].Properties.Attributes, STATIONARY) || IsPlayer(Grid[PrimaryIndex].Properties) || IsHinge(Grid[PrimaryIndex].Properties))
 	{
 		return true;
 	}
@@ -2424,40 +2874,116 @@ DetermineFooting(block* Grid, u32* Indices, u32* NumIndices, u32 X, u32 Y)
 				//TODO(ian): this causes an exception when player hits the edge of the level!!!
 				u32 Index = (Y + I - 1)*LEVELWIDTH + X + J - 1;
 				block SurroundingCell = Grid[Index];
-				if (IsCrate(SurroundingCell.Properties))
+				if (IsCrate(SurroundingCell.Properties) || IsCreature(SurroundingCell.Properties))
 				{
 					b32 Checked = false;
-					for (u32 K = 0;
-						K < *NumIndices;
-						++K)
-					{
-						if (Index == Indices[K])
-						{
-							Checked = true;
-							break;
-						}
-					}
+				for (u32 K = 0;
+K < *NumIndices;
+++K)
+{
+if (Index == Indices[K])
+{
+Checked = true;
+break;
+}
+}
 
-					if (!Checked)
+if (!Checked)
+{
+Indices[(*NumIndices)++] = Index;
+if ((NoFall = DetermineFooting(Grid, Indices, NumIndices, X + J - 1, Y + I - 1)))
+{
+break;
+}
+}
+}
+}
+}
+
+if (NoFall)
+{
+break;
+}
+}
+
+return NoFall;
+}
+
+
+
+internal b32
+IsFalling(block* Grid, u32* Indices, u32* NumIndices, s32 X, s32 Y, block_properties BlockStuff, u32 RecursionDepth = 0)
+{
+	b32 Falling = true;
+
+	if (AreBitsSet(BlockStuff.Attributes, ABLE_TO_FALL))
+	{
+		s32 PrimaryIndex = (Y - 1)*LEVELWIDTH + X;
+		block_properties BlockUnderneathProperties = Grid[PrimaryIndex].Properties;
+		if (BlockUnderneathProperties.Type != BlockStuff.Type && BlockUnderneathProperties.Attributes != 0)
+		{
+			if (IsCrate(Grid[PrimaryIndex].Properties))
+			{
+				Indices[(*NumIndices)++] = (u32)PrimaryIndex;
+				if (!IsFalling(Grid, Indices, NumIndices, X, Y - 1, BlockStuff, RecursionDepth + 1))
+				{
+					return false;
+				}
+			}
+			else
+			{
+				if (RecursionDepth == 0 || !AreBitsSet(BlockStuff.Attributes, IMMEDIATE_FOOTING_ONLY)) return false;
+			}
+		}
+	}
+
+	for (s32 I = -1;
+		I < 2;
+		++I)
+	{
+		for (s32 J = -1;
+			J < 2;
+			++J)
+		{
+			//TODO(ian): this is way to specific; is the rule universal or is it dependent on type?
+			//TODO(ian): this causes an exception when player hits the edge of the level!!!
+			u32 Index = (u32)((Y + I)*LEVELWIDTH + X + J);
+			block SurroundingCell = Grid[Index];
+			if (!AlreadyTagged(Indices, *NumIndices, Index))
+			{
+				if (IsWall(SurroundingCell.Properties) && AreBitsSet(BlockStuff.Attributes,STICKS_TO_WALLS))
+				{
+					return false;
+				}
+				else if (IsSpike(SurroundingCell.Properties) && AreBitsSet(BlockStuff.Attributes, STICKS_TO_SPIKES))
+				{
+					return false;
+				}
+				else if (IsCrate(SurroundingCell.Properties) && AreBitsSet(BlockStuff.Attributes, LINKS_TO_CRATES))
+				{
+					Indices[(*NumIndices)++] = Index;
+					if (!IsFalling(Grid, Indices, NumIndices, X + J, Y + I, BlockStuff, RecursionDepth + 1))
 					{
-						Indices[(*NumIndices)++] = Index;
-						if ((NoFall = DetermineFooting(Grid, Indices, NumIndices, X + J - 1, Y + I - 1)))
-						{
-							break;
-						}
+						return false;
 					}
+				}
+				else if (IsHinge(SurroundingCell.Properties) && AreBitsSet(BlockStuff.Attributes, STICKS_TO_HINGES))
+				{
+					return false;
 				}
 			}
 		}
 
-		if (NoFall)
+		if (!Falling)
 		{
 			break;
 		}
 	}
 
-	return NoFall;
+	return Falling;
 }
+
+
 
 
 internal b32
@@ -2509,38 +3035,27 @@ AreAllBlocksMoving(game_state* GameState, u32* Indices, u32* NumIndices, u32 X, 
 }
 
 internal void
-ApplyMoveToBlocks(game_state* GameState, u32* Indices, u32* NumIndices, v2 Move, u32 X, u32 Y)
+ApplyMoveToBlocks(game_state* GameState, u32* Indices, u32* NumIndices, i2 Move, s32 X, s32 Y)
 {
-	for (u32 I = 0;
-		I < 3;
+	for (s32 I = -1;
+		I < 2;
 		++I)
 	{
-		for (u32 J = 0;
-			J < 3;
+		for (s32 J = -1;
+			J < 2;
 			++J)
 		{
 			if (I != 1 || J != 1)
 			{
 
-				u32 Index = (Y + I - 1)*LEVELWIDTH + X + J - 1;
+				u32 Index = (u32)((Y + I)*LEVELWIDTH + X + J);
 				if (IsCrate(GameState->Grid[Index].Properties))
 				{
-					b32 AlreadyFound = false;
-					for (u32 K = 0;
-						K < *NumIndices;
-						++K)
-					{
-						if (Index == Indices[K])
-						{
-							AlreadyFound = true;
-							break;
-						}
-					}
-					if (!AlreadyFound)
+					if (!AlreadyTagged(Indices,*NumIndices,Index))
 					{
 						Indices[(*NumIndices)++] = Index;
 						GameState->Grid[Index].Move = Move;
-						ApplyMoveToBlocks(GameState, Indices, NumIndices, Move, X + J - 1, Y + I - 1);
+						ApplyMoveToBlocks(GameState, Indices, NumIndices, Move, X + J, Y + I);
 					}
 				}
 			}
@@ -2548,80 +3063,158 @@ ApplyMoveToBlocks(game_state* GameState, u32* Indices, u32* NumIndices, v2 Move,
 	}
 }
 
-internal void
-ImplementMovingRules(game_state* GameState, v2 Move)
+/*
+internal b32
+AcceptableCreaturePos(game_state* GameState, u32 X, u32 Y, u32 CurrentCreatureIndex)
 {
-	b32 FoundPlayer = false;
-	for (u32 Y = 1;
-		Y < LEVELHEIGHT - 2;
-		++Y)
+	b32 AroundCrate = false;
+	for (u32 K = 0;
+		K < 3;
+		++K)
 	{
-		for (u32 X = 1;
-			X < LEVELWIDTH - 2;
-			++X)
+		for (u32 L = 0;
+			L < 3;
+			++L)
 		{
-			if (IsPlayer(GameState->Grid[Y*LEVELWIDTH + X].Properties))
+			if (IsCrate(GameState->Grid[(Y + K - 1)*LEVELWIDTH + X + L - 1].Properties))
 			{
-				GameState->PlayerIndex = Y * LEVELWIDTH + X;
-				FoundPlayer = true;
+				AroundCrate = true;
 				break;
+
 			}
 		}
-		if (FoundPlayer)
+		if (AroundCrate)
 		{
 			break;
 		}
-
 	}
 
-	u32 AdjacentIndex = ((GameState->PlayerIndex / LEVELWIDTH) + (u32)Move.Y) * LEVELWIDTH + ((u32)Move.X + GameState->PlayerIndex % LEVELWIDTH);
+	u32 Indices[30]
+	b32 Result = !AroundCrate && (IsPlayer(GameState->Grid[Y*LEVELWIDTH + X].Properties) || GameState->Grid[Y*LEVELWIDTH + X].Properties.Attributes == 0);
+	Result = Result && !IsFalling(GameState->Grid,;
 
+	return Result;
+}
+*/
+
+internal b32
+ImplementMovingRules(game_state* GameState, i2 Move)
+{
+
+	b32 MoveImplemented = false;
+
+	// #1 1. Apply direction to player
+	GameState->Grid[GameState->PlayerIndex].Move = Move;
+	i2 PlayerPos;
+	PlayerPos.X = GameState->PlayerIndex%LEVELWIDTH;
+	PlayerPos.Y = GameState->PlayerIndex / LEVELWIDTH;
+
+	//b32 ExecuteHingeMove = false;
 	/*
+	if (TLength(Move) == 1)
 	{
-		u32 Indices[30];
+		u32 Indices[30]; //TODO(ian): This might eventually overflow! Find a more stable solution.
 		u32 NumIndices = 0;
-		if (!DetermineStickiness(GameState->Grid, Indices, NumIndices, AdjacentIndex%LEVELWIDTH, AdjacentIndex / LEVELWIDTH))
+		u32 NumTaggings = 0;
+		for (s32 Y = -1;
+			Y < 2;
+			++Y)
 		{
-			Move = { 0.0f,0.0f };
+			b32 Cancel = false;
+			for (s32 X = -1;
+				X < 2;
+				++X)
+			{
+				s32 Index = (Y + PlayerPos.Y)*LEVELWIDTH + X + PlayerPos.X;
+				if (IsHinge(GameState->Grid[Index].Properties))
+				{
+					ExecuteHingeMove = true;
+					if (!AlreadyTagged(Indices, NumIndices, (u32)Index))
+					{
+						if (NumTaggings == 0)
+						{
+							++NumTaggings;
+							Indices[NumIndices++] = (u32)Index;
+							TagType(GameState->Grid, Indices, &NumIndices, PlayerX, PlayerY, HINGE);
+						}
+						else
+						{
+							ExecuteHingeMove = false;
+							Cancel = true;
+							break;
+						}
+					}
+				}
+			}
+
+			if (Cancel)
+			{
+				break;
+			}
 		}
+	}
+
+	//TODO(ian): Implement integer vectors and rects and integer math functions
+	if (ExecuteHingeMove)
+	{
+		//TODO(ian): implement more general moving function
+		//TODO(ian): implement bigger maps!!
+		
+
+		u32 BorderIndices[50];
+		u32 NumBorderIndices = 0;
+		for (s32 Y = 0;
+			Y < LEVELHEIGHT;
+			++Y)
+		{
+			for (s32 X = 0;
+				X < LEVELWIDTH;
+				++X)
+			{
+				
+			}
+		}
+
+
 	}
 	*/
 
 
 
-
-	// #1 1. Apply direction to player
-	GameState->Grid[GameState->PlayerIndex].Move = Move;
+	
 
 
-	// 7. player against wall
-	AdjacentIndex = ((GameState->PlayerIndex / LEVELWIDTH) + (u32)Move.Y) * LEVELWIDTH + ((u32)Move.X + GameState->PlayerIndex % LEVELWIDTH);
-	if (IsWall(GameState->Grid[AdjacentIndex].Properties) || IsSpike(GameState->Grid[AdjacentIndex].Properties))
+	u32 AdjacentIndex = (PlayerPos.Y + Move.Y) * LEVELWIDTH + (Move.X + PlayerPos.X);
+	if (IsWall(GameState->Grid[AdjacentIndex].Properties) || IsSpike(GameState->Grid[AdjacentIndex].Properties)) //#2 Player against Wall/spike
 	{
-		GameState->Grid[GameState->PlayerIndex].Move = v2{ 0.0f,0.0f };
+		GameState->Grid[GameState->PlayerIndex].Move = i2{ 0,0 };
 	}
-	else if (IsCreature(GameState->Grid[AdjacentIndex].Properties))
+	else if (IsCreature(GameState->Grid[AdjacentIndex].Properties)) // #3 Player against creature
 	{
-		if (TLength(Move) > 1.0f)
+		if (TLength(Move) > 1)
 		{
 			GameState->KilledEnemy = true;
 		}
 		else
 		{
-			GameState->Grid[GameState->PlayerIndex].Move = v2{ 0.0f,0.0f };
+			GameState->Grid[GameState->PlayerIndex].Move = i2{ 0,0 };
 		}
 	}
-	else if (GameState->Grid[AdjacentIndex].Properties.Type == 0)
+	else if (GameState->Grid[AdjacentIndex].Properties.Type == 0) // #4 Player in empty square
 	{
 		u32 Indices[30];
 		u32 NumIndices = 0;
 
-		if (!DetermineStickiness(GameState->Grid, Indices, &NumIndices, AdjacentIndex%LEVELWIDTH, AdjacentIndex / LEVELWIDTH))
+		if (!DetermineStickiness(GameState->Grid, Indices, &NumIndices, (AdjacentIndex%LEVELWIDTH), (AdjacentIndex / LEVELWIDTH)))
 		{
-			GameState->Grid[GameState->PlayerIndex].Move = v2{ 0.0f,0.0f };
+			GameState->Grid[GameState->PlayerIndex].Move = i2{ 0,0 };
 		}
 	}
-	else if (IsCrate(GameState->Grid[AdjacentIndex].Properties)) // #2  player pushes block
+	else if (IsHinge(GameState->Grid[AdjacentIndex].Properties))
+	{
+		GameState->Grid[GameState->PlayerIndex].Move = i2{ 0,0 };
+	}
+	else if (IsCrate(GameState->Grid[AdjacentIndex].Properties) || IsHinge(GameState->Grid[AdjacentIndex].Properties)) // #5  player pushes block
 	{
 		GameState->Grid[AdjacentIndex].Move = Move;
 
@@ -2630,13 +3223,58 @@ ImplementMovingRules(game_state* GameState, v2 Move)
 
 		u32 x = AdjacentIndex % LEVELWIDTH;
 		u32 y = AdjacentIndex / LEVELWIDTH;
-		ApplyMoveToBlocks(GameState, Indices, &NumIndices, Move, x, y);
-	
+		ApplyMoveToBlocks(GameState, Indices, &NumIndices, Move, x, y); // #6 Block 'pushes' blocks
+
+
+		/*
+		b32 FoundPattern;
+		// #7 block/hinge against block/hinge
+		do {
+			FoundPattern = false;
+			for (u32 Y = 1;
+				Y < LEVELHEIGHT - 1;
+				++Y)
+			{
+				for (u32 X = 1;
+					X < LEVELWIDTH - 1;
+					++X)
+				{
+					block Cell = GameState->Grid[Y*LEVELWIDTH + X];
+					if ((IsCrate(Cell.Properties)||IsHinge(Cell.Properties)) && LengthSq(Cell.Move) > 0.0f)
+					{
+						u32 AdjacentIndex = (((Y*LEVELWIDTH + X) / LEVELWIDTH) + (u32)Cell.Move.Y) * LEVELWIDTH + ((u32)Cell.Move.X + (Y*LEVELWIDTH + X) % LEVELWIDTH);
+						if (IsWall(GameState->Grid[AdjacentIndex].Properties) || IsSpike(GameState->Grid[AdjacentIndex].Properties)
+							|| IsPlayer(GameState->Grid[AdjacentIndex].Properties) || IsHinge(GameState->Grid[AdjacentIndex].Properties))
+						{
+
+							GameState->Grid[Y*LEVELWIDTH + X].Move = v2{ 0.0f,0.0f };
+							FoundPattern = true;
+						}
+						else if (IsCreature(GameState->Grid[AdjacentIndex].Properties))
+						{
+							if (TLength(Cell.Move) > 1.0f)
+							{
+								GameState->KilledEnemy = true;
+							}
+							else
+							{
+								GameState->Grid[Y*LEVELWIDTH + X].Move = v2{ 0.0f,0.0f };
+								FoundPattern = true;
+							}
+						}
+					}
+				}
+			}
+		} while (FoundPattern);
+
+		*/
+
+
 
 
 
 		b32 FoundPattern;
-		// #4 block against wall
+		// #7 block against 'barrier'
 		do {
 			FoundPattern = false;
 			for (u32 Y = 1;
@@ -2651,79 +3289,161 @@ ImplementMovingRules(game_state* GameState, v2 Move)
 					if (IsCrate(Cell.Properties) && LengthSq(Cell.Move) > 0.0f)
 					{
 						u32 AdjacentIndex = (((Y*LEVELWIDTH + X) / LEVELWIDTH) + (u32)Cell.Move.Y) * LEVELWIDTH + ((u32)Cell.Move.X + (Y*LEVELWIDTH + X) % LEVELWIDTH);
-						if (IsWall(GameState->Grid[AdjacentIndex].Properties) || IsSpike(GameState->Grid[AdjacentIndex].Properties) 
-							|| IsPlayer(GameState->Grid[AdjacentIndex].Properties) || IsCreature(GameState->Grid[AdjacentIndex].Properties))
+						if (IsWall(GameState->Grid[AdjacentIndex].Properties) || IsSpike(GameState->Grid[AdjacentIndex].Properties)
+							|| IsPlayer(GameState->Grid[AdjacentIndex].Properties) || IsHinge(GameState->Grid[AdjacentIndex].Properties))
 						{
 
-							GameState->Grid[Y*LEVELWIDTH + X].Move = v2{ 0.0f,0.0f };
+							GameState->Grid[Y*LEVELWIDTH + X].Move = i2{ 0,0 };
 							FoundPattern = true;
+						}
+						else if (IsCreature(GameState->Grid[AdjacentIndex].Properties))
+						{
+							if (TLength(Cell.Move) > 1)
+							{
+								GameState->KilledEnemy = true;
+							}
+							else
+							{
+								GameState->Grid[Y*LEVELWIDTH + X].Move = i2{ 0,0 };
+								FoundPattern = true;
+							}
 						}
 					}
 				}
 			}
 		} while (FoundPattern);
 
+
 		NumIndices = 0;
-		if (!AreAllBlocksMoving(GameState, Indices, &NumIndices, x, y))
+		if (!AreAllBlocksMoving(GameState, Indices, &NumIndices, x, y)) //#8 Cancel moves of blocks if one isn't moving
 		{
 			NumIndices = 0;
-			Move = v2{ 0.0f,0.0f };
+			Move = i2{ 0,0 };
 			ApplyMoveToBlocks(GameState, Indices, &NumIndices, Move, x, y);
 		}
 
 
-		/*
-		// #5 block against stationary block
-		do {
-			FoundPattern = false;
-			for (u32 Y = 1;
-				Y < LEVELHEIGHT - 1;
-				++Y)
+
+		// #9 Player against stationary block
+		if (IsCrate(GameState->Grid[AdjacentIndex].Properties) && LengthSq(GameState->Grid[AdjacentIndex].Move) == 0)
+		{
+			GameState->Grid[GameState->PlayerIndex].Move = i2{ 0,0 };
+		}
+	}
+
+
+	if (LengthSq(GameState->Grid[GameState->PlayerIndex].Move) > 0)
+	{
+		//TODO(ian): make sure the angle stuff is correct!!!
+		MoveImplemented = true;
+		s32 Angle = GetAngle(Move);
+		if (Angle <= 1)
+		{
+			for (u32 X = LEVELWIDTH - 2;
+				X >= 1;
+				--X)
 			{
-				for (u32 X = 1;
-					X < LEVELWIDTH - 1;
-					++X)
+				for (u32 Y = LEVELWIDTH - 2;
+					Y >= 1;
+					--Y)
 				{
-					block Cell = GameState->Grid[Y*LEVELWIDTH + X];
-					if (IsCrate(Cell.Properties) && LengthSq(Cell.Move) > 0.0f)
+					u32 CellIndex = Y * LEVELWIDTH + X;
+					block Cell = GameState->Grid[CellIndex];
+					if (LengthSq(GameState->Grid[CellIndex].Move) > 0)
 					{
-						u32 AdjacentIndex = (((Y*LEVELWIDTH + X) / LEVELWIDTH) + (u32)Cell.Move.Y) * LEVELWIDTH + ((u32)Cell.Move.X + (Y*LEVELWIDTH + X) % LEVELWIDTH);
-						if (IsCrate(GameState->Grid[AdjacentIndex].Properties) && LengthSq(GameState->Grid[AdjacentIndex].Move) == 0.0f)
+						u32 NewIndex = (Y + (u32)Move.Y)*LEVELWIDTH + X + (u32)Move.X;
+						GameState->Grid[NewIndex] = Cell;
+						GameState->Grid[CellIndex] = block{ i2{0,0},block_properties{0,0} };
+						if (IsPlayer(Cell.Properties))
 						{
-							GameState->Grid[Y*LEVELWIDTH + X].Move = v2{ 0.0f,0.0f };
-							FoundPattern = true;
+							GameState->PlayerIndex = NewIndex;
 						}
 					}
 				}
 			}
-		} while (FoundPattern);
-		*/
-
-
-		// Player against stationary block
-		if (IsCrate(GameState->Grid[AdjacentIndex].Properties) && LengthSq(GameState->Grid[AdjacentIndex].Move) == 0.0f)
-		{
-			GameState->Grid[GameState->PlayerIndex].Move = v2{ 0.0f,0.0f };
 		}
-
-		
-		if (LengthSq(GameState->Grid[GameState->PlayerIndex].Move) == 0.0f)
+		else if (Angle <= 3)
 		{
-			for (u32 Y = 1;
-				Y < LEVELHEIGHT - 1;
-				++Y)
+			for (u32 Y = LEVELWIDTH - 2;
+				Y >= 1;
+				--Y)
 			{
-				for (u32 X = 1;
-					X < LEVELWIDTH - 1;
+				for (u32 X = 0;
+					X < LEVELWIDTH;
 					++X)
 				{
-					GameState->Grid[Y*LEVELWIDTH + X].Move = v2{ 0.0f,0.0f };
+					u32 CellIndex = Y * LEVELWIDTH + X;
+					block Cell = GameState->Grid[CellIndex];
+					if (LengthSq(GameState->Grid[CellIndex].Move) > 0)
+					{
+						u32 NewIndex = (Y + (u32)Move.Y)*LEVELWIDTH + X + (u32)Move.X;
+						GameState->Grid[NewIndex] = Cell;
+						GameState->Grid[CellIndex] = block{ i2{ 0,0 },block_properties{ 0,0 } };
+						if (IsPlayer(Cell.Properties))
+						{
+							GameState->PlayerIndex = NewIndex;
+						}
+					}
 				}
 			}
 		}
-		
+		else if (Angle <= 5)
+		{
+			for (u32 X = 0;
+				X < LEVELWIDTH;
+				++X)
+			{
+				for (u32 Y = LEVELWIDTH - 2;
+					Y >= 1;
+					--Y)
+				{
+					u32 CellIndex = Y * LEVELWIDTH + X;
+					block Cell = GameState->Grid[CellIndex];
+					if (LengthSq(GameState->Grid[CellIndex].Move) > 0)
+					{
+						u32 NewIndex = (Y + (u32)Move.Y)*LEVELWIDTH + X + (u32)Move.X;
+						GameState->Grid[NewIndex] = Cell;
+						GameState->Grid[CellIndex] = block{ i2{ 0,0 },block_properties{ 0,0 } };
+						if (IsPlayer(Cell.Properties))
+						{
+							GameState->PlayerIndex = NewIndex;
+						}
+					}
+				}
+			}
+		}
+		else if (Angle <= 7)
+		{
+			for (u32 Y = 0;
+				Y < LEVELWIDTH;
+				++Y)
+			{
+				for (u32 X = 0;
+					X < LEVELWIDTH;
+					++X)
+				{
+					u32 CellIndex = Y * LEVELWIDTH + X;
+					block Cell = GameState->Grid[CellIndex];
+					if (LengthSq(GameState->Grid[CellIndex].Move) > 0)
+					{
+						u32 NewIndex = (Y + (u32)Move.Y)*LEVELWIDTH + X + (u32)Move.X;
+						GameState->Grid[NewIndex] = Cell;
+						GameState->Grid[CellIndex] = block{ i2{ 0,0 },block_properties{ 0,0 } };
+						if (IsPlayer(Cell.Properties))
+						{
+							GameState->PlayerIndex = NewIndex;
+						}
+					}
+				}
+			}
+		}
+
 	}
+
+
+	return MoveImplemented;
 }
+
 
 
 internal void
@@ -2732,213 +3452,88 @@ EnactGravity(game_state* GameState)
 	u32 BlockIndices[30];
 	u32 Num = 0;
 	block Blocks[30];
+	u32 TempIndices[30];
+	u32 NumIndices = 0;
 	b32 FoundPattern = false;
-	for (u32 Y = LEVELHEIGHT - 1;
-		Y > 0;
-		--Y)
+	for (s32 Y = 0;
+		Y < LEVELHEIGHT;
+		++Y)
 	{
-		for (u32 X = 1;
+		for (s32 X = 1;
 			X < LEVELWIDTH - 1;
 			++X)
 		{
 			block Cell = GameState->Grid[Y*LEVELWIDTH + X];
-			if (IsCrate(Cell.Properties))
+			if (IsPlayer(Cell.Properties) || IsCrate(Cell.Properties))
 			{
-				b32 NoFall;
-				u32 VerticalCoord = Y, HorizontalNumIndices = 1, NumIndices = 0;
-				u32 Indices[30];
-				b32 Stickiness = DetermineStickiness(GameState->Grid, Indices, &NumIndices, X, VerticalCoord);
 				NumIndices = 0;
-				b32 Footing = DetermineFooting(GameState->Grid, Indices, &NumIndices, X, VerticalCoord);
-				if (!Stickiness && !Footing)
+				if (IsFalling(GameState->Grid, TempIndices, &NumIndices, X, Y, Cell.Properties))
 				{
-					BlockIndices[Num] = (Y+1) * LEVELWIDTH + X;
+					BlockIndices[Num] = (u32)((Y - 1) * LEVELWIDTH + X);
 					Blocks[Num++] = Cell;
 					FoundPattern = true;
 				}
 				else
 				{
-					BlockIndices[Num] = (Y) * LEVELWIDTH + X;
-					Blocks[Num++] = Cell;
-				}
-			}
-			else if (IsPlayer(Cell.Properties))
-			{
-				b32 NoFall;
-				u32 VerticalCoord = Y, NumIndices = 1;
-				u32 Indices[30];
-				Indices[0] = Y * LEVELWIDTH + X;
-				if (!DetermineStickiness(GameState->Grid, Indices, &NumIndices, X, VerticalCoord) && GameState->Grid && GameState->Grid[(VerticalCoord + 1)*LEVELWIDTH + X].Properties.Type == 0)
-				{
-					BlockIndices[Num] = (Y+1) * LEVELWIDTH + X;
-					Blocks[Num++] = Cell;
-					FoundPattern = true;
-				}
-				else
-				{
-					BlockIndices[Num] = (Y) * LEVELWIDTH + X;
-					Blocks[Num++] = Cell;
-				}
-			}
-			else if (IsCreature(Cell.Properties))
-			{
-				u32 Indices[30];
-				u32 NumIndices = 1;
-				Indices[0] = Y * LEVELWIDTH + X;
-				if (!DetermineLinking(GameState->Grid, Indices, &NumIndices, X, Y))
-				{
-					BlockIndices[Num] = (Y + 1) * LEVELWIDTH + X;
-					Blocks[Num++] = Cell;
-					FoundPattern = true;
-				}
-				else
-				{
-					BlockIndices[Num] = (Y)* LEVELWIDTH + X;
+					BlockIndices[Num] = (u32)(Y* LEVELWIDTH + X);
 					Blocks[Num++] = Cell;
 				}
 			}
 		}
 	}
 
-	for (u32 Y = LEVELHEIGHT - 1;
-		Y > 0;
-		--Y)
+	for (u32 I = 0;
+		I < LEVELWIDTH*LEVELHEIGHT;
+		++I)
 	{
-		for (u32 X = 1;
+		if (GameState->Grid[I].Properties.Attributes == GameState->Grid[I].Properties.Type && GameState->Grid[I].Properties.Type != 0)
+		{
+			int u = 9;
+		}
+	}
+
+	for (s32 Y = 0;
+		Y < LEVELHEIGHT;
+		++Y)
+	{
+		for (s32 X = 1;
 			X < LEVELWIDTH - 1;
 			++X)
 		{
 			block Cell = GameState->Grid[Y*LEVELWIDTH + X];
 			if (IsCrate(Cell.Properties) || IsPlayer(Cell.Properties))
 			{
-				GameState->Grid[Y*LEVELWIDTH + X] = block{ v2{ 0.0f,0.0f },block_properties{ 0,0 } };
+				GameState->Grid[Y*LEVELWIDTH + X] = block{ i2{ 0,0 },block_properties{ 0,0 } };
 			}
 		}
 	}
 
+	for (u32 I = 0;
+		I < LEVELWIDTH*LEVELHEIGHT;
+		++I)
+	{
+		if (GameState->Grid[I].Properties.Attributes == GameState->Grid[I].Properties.Type && GameState->Grid[I].Properties.Type != 0)
+		{
+			int u = 9;
+		}
+	}
 
+	
 	for (u32 I = 0;
 		I < Num;
 		++I)
 	{
 		GameState->Grid[BlockIndices[I]] = Blocks[I];
 	}
-	//TODO(ian): change Player index here!!!1
-}
+	
 
-internal void
-ImplementCreatureRules(game_state* GameState)
-{
-	for (u32 Y = 1;
-		Y < LEVELHEIGHT;
-		++Y)
+	for (u32 I = 0;
+		I < LEVELWIDTH*LEVELHEIGHT;
+		++I)
 	{
-		for (u32 X = 1;
-			X < LEVELWIDTH;
-			++X)
+		if (GameState->Grid[I].Properties.Attributes == GameState->Grid[I].Properties.Type && GameState->Grid[I].Properties.Type != 0)
 		{
-			if (IsCreature(GameState->Grid[Y*LEVELWIDTH + X].Properties))
-			{
-				u32 Exes[9];
-				u32 Whys[9];
-				u32 NumPoints = 0;
-				Exes[0] = X;
-				Whys[0] = Y;
-				++NumPoints;
-
-				for (u32 I = 0;
-					I < 3;
-					++I)
-				{
-					for (u32 J = 0;
-						J < 3;
-						++J)
-					{
-						if (GameState->Grid[(Y+I-1)*LEVELWIDTH+X+J-1].Properties.Attributes == 0 || IsPlayer(GameState->Grid[(Y + I - 1)*LEVELWIDTH + X + J - 1].Properties))
-						{
-							b32 AroundCrate = false;
-							for (u32 K = 0;
-								K < 3;
-								++K)
-							{
-								for (u32 L = 0;
-									L < 3;
-									++L)
-								{
-									if (IsCrate(GameState->Grid[(Y+I+K-2)*LEVELWIDTH + X+J+L-2].Properties))
-									{
-										AroundCrate = true;
-										break;
-
-									}
-								}
-								if (AroundCrate)
-								{
-									break;
-								}
-							}
-
-
-							if (!AroundCrate)
-							{
-								Exes[NumPoints] = X + J-1;
-								Whys[NumPoints++] = Y + I-1;
-							}
-						}
-						else if (IsCrate(GameState->Grid[(Y + I-1)*LEVELWIDTH + X + J-1].Properties))
-						{
-							GameState->Grid[Y*LEVELWIDTH + X].Properties = InitializeCrateProperties();
-						}
-					}
-				}
-
-				
-
-				u32 Indices[30];
-				u32 NumIndices = 1;
-				Indices[0] = Y * LEVELWIDTH + X;
-
-				for (u32 I = NumPoints-1;
-					I > 0;
-					--I)
-				{
-					NumIndices = 1;
-
-					if (!DetermineLinking(GameState->Grid, Indices, &NumIndices, Exes[I], Whys[I]))
-					{
-						--NumPoints;
-						for (u32 J = I;
-							J < NumPoints;
-							++J)
-						{
-							Exes[J] = Exes[J + 1];
-							Whys[J] = Whys[J + 1];
-						}
-					}
-				}
-
-				r32 MinDistance = 10000000.0f;
-				u32 MinIndex = 0;
-				for (u32 I = 0;
-					I < NumPoints;
-					++I)
-				{
-					r32 Distance = DistanceSq(v2{ (r32)(GameState->PlayerIndex%LEVELWIDTH),(r32)(GameState->PlayerIndex / LEVELWIDTH) }, v2{ (r32)Exes[I],(r32)Whys[I] });
-					if (Distance < MinDistance)
-					{
-						MinDistance = Distance;
-						MinIndex = I;
-					}
-				}
-
-				//TODO(ian): change value to change how close creatrues become alerted
-				r32 AlertDistance = 20.0f;
-				if (MinDistance < AlertDistance)
-				{
-					GameState->Grid[Y*LEVELWIDTH + X].Move = v2{ (r32)((s32)(Exes[MinIndex] - X)),(r32)((s32)(Whys[MinIndex] - Y)) };
-					int s = 0;
-				}
-			}
+			int u = 9;
 		}
 	}
 }
@@ -2958,11 +3553,11 @@ ExecuteTurn(game_state* GameState, u32 Pressed, u32 Held)
 			X < LEVELWIDTH;
 			++X)
 		{
-			GameState->Grid[Y*LEVELWIDTH + X].Move = v2{ 0.0f,0.0f };
+			GameState->Grid[Y*LEVELWIDTH + X].Move = i2{ 0,0 };
 		}
 	}
 
-	v2 Move = v2{ 0.0f,0.0f };
+	i2 Move = i2{ 0,0 };
 
 	u32 NumHeld = 0, NumPressed = 0;
 	u32 Bit = 1;
@@ -2978,227 +3573,56 @@ ExecuteTurn(game_state* GameState, u32 Pressed, u32 Held)
 	
 	if (NumHeld == 0 && NumPressed == 1)
 	{
-		if (AreBitsSet(Pressed, UP)) Move = v2{ 0.0f,-1.0f };
-		else if (AreBitsSet(Pressed, DOWN)) Move = v2{ 0.0f,1.0f };
-		else if (AreBitsSet(Pressed, LEFT)) Move = v2{ -1.0f,0.0f };
-		else if (AreBitsSet(Pressed, RIGHT)) Move = v2{ 1.0f,0.0f };
+		if (AreBitsSet(Pressed, UP)) Move = i2{ 0,1 };
+		else if (AreBitsSet(Pressed, DOWN)) Move = i2{ 0,-1 };
+		else if (AreBitsSet(Pressed, LEFT)) Move = i2{ -1,0};
+		else if (AreBitsSet(Pressed, RIGHT)) Move = i2{ 1,0 };
 	}
 	else if (NumHeld == 1 && NumPressed == 0)
 	{
-		if (AreBitsSet(Held, UP)) Move = v2{ 0.0f,-1.0f };
-		else if (AreBitsSet(Held, DOWN)) Move = v2{ 0.0f,1.0f };
-		else if (AreBitsSet(Held, LEFT)) Move = v2{ -1.0f,0.0f };
-		else if (AreBitsSet(Held, RIGHT)) Move = v2{ 1.0f,0.0f };
+		if (AreBitsSet(Held, UP)) Move = i2{ 0,1 };
+		else if (AreBitsSet(Held, DOWN)) Move = i2{ 0,-1 };
+		else if (AreBitsSet(Held, LEFT)) Move = i2{ -1,0 };
+		else if (AreBitsSet(Held, RIGHT)) Move = i2{ 1,0 };
 	}
 	else if (NumHeld == 1 && NumPressed == 1)
 	{
-		if (AreBitsSet(Held, UP)) Move = v2{ 0.0f,-1.0f };
-		else if (AreBitsSet(Held, DOWN)) Move = v2{ 0.0f,1.0f };
-		else if (AreBitsSet(Held, LEFT)) Move = v2{ -1.0f,0.0f };
-		else if (AreBitsSet(Held, RIGHT)) Move = v2{ 1.0f,0.0f };
+		if (AreBitsSet(Held, UP)) Move = i2{ 0,1 };
+		else if (AreBitsSet(Held, DOWN)) Move = i2{ 0,-1 };
+		else if (AreBitsSet(Held, LEFT)) Move = i2{ -1,0 };
+		else if (AreBitsSet(Held, RIGHT)) Move = i2{ 1,0 };
 	}
 
 
-
-	// Rules: 
-
-	// 0. get main direction
-	// 1. apply direction to player
-	// 2. player against wall or spike
-	// 3. player pushes block
-	// 3.5 block pushes its connected group of blocks
-	// 4. block 90 degrees turn
-	// 5. block against stationary block
-	// 6. player against stationary block
-	// 7. if player is blocked & two directions: add new direction
-	// 8. repeat steps 2-6
-	// 9. apply falling to blocks
-
-	ImplementMovingRules(GameState, Move);
-
-	if (LengthSq(GameState->Grid[GameState->PlayerIndex].Move) == 0.0f && NumPressed == 1 && NumHeld == 1)
-	{
-		if (AreBitsSet(Pressed, UP)) Move = Move + V2( 0.0f,-1.0f );
-		else if (AreBitsSet(Pressed, DOWN)) Move = Move + V2( 0.0f,1.0f );
-		else if (AreBitsSet(Pressed, LEFT)) Move = Move + V2(-1.0f, 0.0f);
-		else if (AreBitsSet(Pressed, RIGHT)) Move = Move + V2( 1.0f,0.0f );
-
-		for (u32 Y = 1;
-			Y < LEVELHEIGHT - 1;
-			++Y)
-		{
-			for (u32 X = 1;
-				X < LEVELWIDTH - 1;
-				++X)
-			{
-				GameState->Grid[Y*LEVELWIDTH + X].Move = v2{ 0.0f,0.0f };
-			}
-		}
-
-		ImplementMovingRules(GameState, Move);
-	}
-
-	if (!GameState->KilledEnemy && LengthSq(GameState->Grid[GameState->PlayerIndex].Move) > 0.0f)
-	{
-		ImplementCreatureRules(GameState);
-	}
-
-
-
-
-	b32 AddingUndo = false;
-
-	for (u32 Y = 1;
-		Y < LEVELHEIGHT - 1;
-		++Y)
-	{
-		for (u32 X = 1;
-			X < LEVELWIDTH - 1;
-			++X)
-		{
-			if (LengthSq(GameState->Grid[Y*LEVELWIDTH + X].Move) > 0.0f)
-			{
-				AddingUndo = true;
-				break;
-			}
-		}
-		if (AddingUndo)
-		{
-			break;
-		}
-	}
-
-	if (AddingUndo && GameState->TotalStateBytes < MAX_UNDOS)
+	if (GameState->TotalStateBytes < MAX_UNDOS)
 	{
 		AddUndo(GameState->Grid, GameState->PreviousState, &GameState->TotalStateBytes, &GameState->TotalStateEntries);
 	}
-	else if (GameState->TotalStateBytes >= MAX_UNDOS)
+	else
 	{
-		printf("Out of Undos!!!!!!!");
+		printf("\nOut of Undos! There are %d entries.", GameState->TotalStateEntries);
+	}
+
+
+	b32 AddingUndo = ImplementMovingRules(GameState, Move);
+
+	if (!AddingUndo && NumPressed == 1 && NumHeld == 1)
+	{
+		if (AreBitsSet(Pressed, UP)) Move = Move + I2( 0.0f,-1.0f );
+		else if (AreBitsSet(Pressed, DOWN)) Move = Move + I2( 0.0f,1.0f );
+		else if (AreBitsSet(Pressed, LEFT)) Move = Move + I2(-1.0f, 0.0f);
+		else if (AreBitsSet(Pressed, RIGHT)) Move = Move + I2( 1.0f,0.0f );
+
+		AddingUndo = ImplementMovingRules(GameState, Move);
+	}
+
+	
+	if (!AddingUndo && GameState->TotalStateEntries > 0)
+	{
+		--GameState->TotalStateEntries;
+		GameState->TotalStateBytes -= GameState->PreviousState[GameState->TotalStateBytes - 1].Type + 1;
 	}
 	
-
-	// 8. Move everything
-	block Moveables[30]; //TODO(ian): Maybe have dynamic data structure handle this?
-	v2 Positions[30];
-	u32 NumMoveables = 0;
-
-	for (u32 Y = 1;
-		Y < LEVELHEIGHT - 1;
-		++Y)
-	{
-		for (u32 X = 1;
-			X < LEVELWIDTH - 1;
-			++X)
-		{
-			block Cell = GameState->Grid[Y*LEVELWIDTH + X];
-			if (IsMoveable(Cell.Properties))
-			{
-				Moveables[NumMoveables] = Cell;
-				Positions[NumMoveables] = V2((r32)X, (r32)Y);
-				Moveables[NumMoveables++].Move = Cell.Move + Positions[NumMoveables];
-				GameState->Grid[Y*LEVELWIDTH + X] = block{ v2{ 0.0f,0.0f },block_properties{0,0} };
-			}
-		}
-	}
-
-
-	for (u32 I = 0;
-		I < NumMoveables;
-		++I)
-	{
-		u32 Index = (u32)Moveables[I].Move.Y*LEVELWIDTH + (u32)Moveables[I].Move.X;
-		for (u32 J = I+1;
-			J < NumMoveables;
-			++J)
-		{
-			u32 SecondIndex = (u32)Moveables[J].Move.Y*LEVELWIDTH + (u32)Moveables[J].Move.X;
-			if (Index == SecondIndex)
-			{
-				if (IsCrate(Moveables[I].Properties))
-				{
-					printf("\nCrates are colliding with stuff!!!!");
-					//NOTE(ian): None of this should happen!!!!
-					if (IsCrate(Moveables[J].Properties))
-					{
-
-					}
-					else if (IsPlayer(Moveables[J].Properties))
-					{
-
-					}
-					else if (IsCreature(Moveables[J].Properties))
-					{
-
-					}
-				}
-				else if (IsPlayer(Moveables[I].Properties))
-				{
-					if (IsCrate(Moveables[J].Properties))
-					{
-						//NOTE(ian): this shouldn't happen!
-						printf("\nCrates are colliding with the player!!!!");
-
-					}
-					else if (IsPlayer(Moveables[J].Properties))
-					{
-						//NOTE(ian): this shouldn't happen!!!
-					}
-					else if (IsCreature(Moveables[J].Properties))
-					{
-						if (GameState->KilledEnemy)
-						{
-							block Temp;
-							Temp = Moveables[J];
-							Moveables[J] = Moveables[I];
-							Moveables[I] = Temp;
-							v2 PTemp = Positions[J];
-							Positions[J] = Positions[I];
-							Positions[I] = PTemp;
-						}
-					}
-				}
-				else if (IsCreature(Moveables[I].Properties))
-				{
-					if (IsCrate(Moveables[J].Properties))
-					{
-						//NOTE(ian): this shouldn't happen!!!!
-					}
-					else if (IsPlayer(Moveables[J].Properties))
-					{
-						if (!GameState->KilledEnemy)
-						{
-							block Temp;
-							Temp = Moveables[J];
-							Moveables[J] = Moveables[I];
-							Moveables[I] = Temp;
-							v2 PTemp = Positions[J];
-							Positions[J] = Positions[I];
-							Positions[I] = PTemp;
-						}
-					}
-					else if (IsCreature(Moveables[J].Properties))
-					{
-						Moveables[J].Move = Positions[J];
-					}
-				}
-			}
-		}
-	}
-
-
-	GameState->PlayerIndex = -1;
-	for (u32 I = 0;
-		I < NumMoveables;
-		++I)
-	{
-		u32 Index = (u32)Moveables[I].Move.Y*LEVELWIDTH + (u32)Moveables[I].Move.X;
-		GameState->Grid[Index] = Moveables[I];
-		if (IsPlayer(Moveables[I].Properties))
-		{
-			GameState->PlayerIndex = Index;
-		}
-	}
 }
 
 internal void
@@ -3236,7 +3660,7 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 
 
 
-	v2 Move = { 0 };
+	i2 Move = { 0 };
 	r32 AgainTime = 0.25f;
 	u32 Pressed = 0, Held = 0;
 	if (!Input->Up.PreviousPressed && Input->Up.CurrentPressed)
@@ -3357,56 +3781,56 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 
 	
 
-
+	//TODO(ian): Make the Coordinate System normal
 	if (!Pressed && Held)
 	{
 		if (AreBitsSet(Held, UP))
 		{
-			Move = v2{ 0.0f,-1.0f };
+			Move = i2{ 0,1 };
 		}
 		
 		if (AreBitsSet(Held, DOWN))
 		{
-			Move = v2{ 0.0f,1.0f };
+			Move = i2{ 0,-1 };
 		}
 
 		if (AreBitsSet(Held, LEFT))
 		{
-			Move = v2{ -1.0f,0.0f };
+			Move = i2{ -1,0 };
 		}
 
 		if (AreBitsSet(Held, RIGHT))
 		{
-			Move = v2{ 1.0f,0.0f };
+			Move = i2{ 1,0 };
 		}
 	}
 	else
 	{
 		if (AreBitsSet(Pressed, UP))
 		{
-			Move = v2{ 0.0f,-1.0f };
+			Move = i2{ 0,1 };
 		}
 
 		if (AreBitsSet(Pressed, DOWN))
 		{
-			Move = v2{ 0.0f,1.0f };
+			Move = i2{ 0,-1 };
 		}
 
 		if (AreBitsSet(Pressed, LEFT))
 		{
-			Move = v2{ -1.0f,0.0f };
+			Move = i2{ -1,0 };
 		}
 
 		if (AreBitsSet(Pressed, RIGHT))
 		{
-			Move = v2{ 1.0f,0.0f };
+			Move = i2{ 1,0 };
 		}
 	}
 
 
 	
-
-	b32 NoFall = true;
+	//GameState->PlayerIndex = -1;
+	b32 Falling = false;
 	{
 		u32 Indices[30];
 		u32 NumIndices = 0;
@@ -3419,44 +3843,18 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 				X < LEVELWIDTH-1;
 				++X)
 			{
-				if (IsCrate(GameState->Grid[Y*LEVELWIDTH + X].Properties))
+				block Cell = GameState->Grid[Y*LEVELWIDTH + X];
+				if (IsPlayer(Cell.Properties) || IsCrate(Cell.Properties))
 				{
 					NumIndices = 0;
-					b32 Footing = DetermineFooting(GameState->Grid, Indices, &NumIndices, X, Y);
-					NumIndices = 0;
-					b32 Stickiness = DetermineStickiness(GameState->Grid, Indices, &NumIndices, X, Y);
-					if (!Footing && !Stickiness)
+					if (IsFalling(GameState->Grid, Indices, &NumIndices, (s32)X, (s32)Y, GameState->Grid[Y*LEVELWIDTH + X].Properties))
 					{
-						NoFall = false;
-						break;
-					}
-				}
-				else if (IsPlayer(GameState->Grid[Y*LEVELWIDTH + X].Properties))
-				{
-					GameState->PlayerIndex = Y * LEVELWIDTH + X;
-					NumIndices = 0;
-					if ((!DetermineStickiness(GameState->Grid, Indices, &NumIndices, X, Y)) && GameState->Grid[(Y+1)*LEVELWIDTH+X].Properties.Type == 0)
-					{
-						NoFall = false;
-						break;
-					}
-				}
-				else if (IsCreature(GameState->Grid[Y*LEVELWIDTH + X].Properties))
-				{
-					NumIndices = 1;
-					Indices[0] = Y * LEVELWIDTH + X;
-					b32 Linking = DetermineLinking(GameState->Grid, Indices, &NumIndices, X, Y);
-					NumIndices = 0;
-					b32 Footing = DetermineFooting(GameState->Grid, Indices, &NumIndices, X, Y);
-					
-					if (!Footing && !Linking)
-					{
-						NoFall = false;
+						Falling = true;
 						break;
 					}
 				}
 			}
-			if (!NoFall)
+			if (Falling)
 			{
 				break;
 			}
@@ -3464,11 +3862,33 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 	}
 
 
+	for (u32 Y = 1;
+		Y < LEVELHEIGHT - 1;
+		++Y)
+	{
+		b32 FoundPlayer = false;
+		for (u32 X = 1;
+			X < LEVELWIDTH - 1;
+			++X)
+		{
+			block Cell = GameState->Grid[Y*LEVELWIDTH + X];
+			if (IsPlayer(Cell.Properties))
+			{
+				GameState->PlayerIndex = Y * LEVELWIDTH + X;
+				FoundPlayer = true;
+				break;
+			}
+		}
+		if (FoundPlayer)
+		{
+			break;
+		}
+	}
 
 	GameState->AgainTime += Input->dt;
-	if (NoFall)
+	if (!Falling)
 	{
-		if (LengthSq(Move) != 0.0f && GameState->PlayerIndex != -1)
+		if (CLength(Move) != 0)
 		{
 			ExecuteTurn(GameState, Pressed, Held);
 			GameState->AgainTime = 0.0f;
@@ -3478,8 +3898,26 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 	{
 		if (GameState->AgainTime >= AgainTime)
 		{
+			for (u32 I = 0;
+				I < LEVELWIDTH*LEVELHEIGHT;
+				++I)
+			{
+				if (GameState->Grid[I].Properties.Attributes == GameState->Grid[I].Properties.Type && GameState->Grid[I].Properties.Type != 0)
+				{
+					int u = 9;
+				}
+			}
 			GameState->AgainTime -= AgainTime;
 			EnactGravity(GameState);
+			for (u32 I = 0;
+				I < LEVELWIDTH*LEVELHEIGHT;
+				++I)
+			{
+				if (GameState->Grid[I].Properties.Attributes == GameState->Grid[I].Properties.Type && GameState->Grid[I].Properties.Type != 0)
+				{
+					int u = 9;
+				}
+			}
 		}
 	}
 
@@ -3490,37 +3928,67 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 
 
 
-	for (u32 Y = 0;
-		Y < LEVELHEIGHT;
-		++Y)
+	for (s32 Y = LEVELHEIGHT-1;
+		Y >= 0;
+		--Y)
 	{
-		for (u32 X = 0;
+		for (s32 X = 0;
 			X < LEVELWIDTH;
 			++X)
 		{
 			block_properties Field = GameState->Grid[Y*LEVELWIDTH + X].Properties;
 			if (IsWall(Field))
 			{
-				DrawRect(*Window, GameState->Screen, r2{ v2{(r32)X,(r32)Y},v2{1.0f,1.0f} }, v4{ 0.7f,0.8f,1.0f,1.0f });
+				DrawRect(*Window, GameState->Screen, r2{ v2{(r32)X,(r32)(LEVELHEIGHT-Y-1)},v2{1.0f,1.0f} }, v4{ 0.7f,0.8f,1.0f,1.0f });
 			}
 			else if (IsPlayer(Field))
 			{
-				DrawRect(*Window, GameState->PlayerTexture, GameState->Screen, r2{ v2{ (r32)X,(r32)Y },v2{ 1.0f,1.0f } });
+				DrawRect(*Window, GameState->PlayerTexture, GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } });
 			}
 			else if (IsCrate(Field))
 			{
-				DrawRect(*Window, GameState->Texture, GameState->Screen, r2{ v2{ (r32)X,(r32)Y },v2{ 1.0f,1.0f } });
+				DrawRect(*Window, GameState->Texture, GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } });
 			}
 			else if (IsSpike(Field))
 			{
-				DrawRect(*Window, GameState->Screen, r2{ v2{ (r32)X,(r32)Y },v2{ 1.0f,1.0f } }, v4{ 0.5f,0.2f,0.045f,1.0f });
+				DrawRect(*Window, GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } }, v4{ 0.5f,0.2f,0.045f,1.0f });
 			}
 			else if (IsCreature(Field))
 			{
-				DrawRect(*Window, GameState->Screen, r2{ v2{ (r32)X,(r32)Y },v2{ 1.0f,1.0f } }, v4{ 0.3f,0.9f,0.645f,1.0f });
+				DrawRect(*Window, GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } }, v4{ 0.3f,0.9f,0.645f,1.0f });
+			}
+			else if (IsHinge(Field))
+			{
+				DrawRect(*Window, GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } }, v4{ 0.1f,0.1f,0.545f,1.0f });
+			}
+			else if (Field.Attributes == 0 && Field.Type == 0)
+			{
+
+			}
+			else
+			{
+				DrawRect(*Window, GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } }, v4{ 0.1f,0.1f,0.545f,1.0f });
 			}
 		}
 	}
+
+	/*
+		u32 Indices[30];
+		u32 NumIndices = 0;
+		i2 PlayerPos;
+		PlayerPos.X = GameState->PlayerIndex%LEVELWIDTH;
+		PlayerPos.Y = GameState->PlayerIndex / LEVELWIDTH;
+		if (IsFalling(GameState->Grid,Indices,&NumIndices,PlayerPos.X,PlayerPos.Y,GameState->Grid[GameState->PlayerIndex].Properties))
+		{
+			DrawRect(*Window, GameState->Screen, r2{ 1.0f,0.0f,1.0f,1.0f }, v4{ 0.0f,1.0f,0.0f,1.0f });
+		}
+		else
+		{
+			DrawRect(*Window, GameState->Screen, r2{ 1.0f,0.0f,1.0f,1.0f }, v4{ 1.0f,0.0f,0.0f,1.0f });
+		}
+	}
+	*/
+
 
 	/**
 	if (!NoFall)
@@ -3861,19 +4329,458 @@ main(int argc, char* argv[])
 			Point.Y -= 1.0f;
 		}
 
-		//Number of puzzles so far: ~10
 
+		//TODO(ian): make level editor!!! support a big world!!!!
+		//Number of puzzles so far: ~13
+
+		/*
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s.xxxxxssbssxxxs"
+			"s.x.....bsssssss"
+			"s.xxxxsss..bb..s"
+			"s..bbb...sssxx.s"
+			"s.xxxxsss....x.s"
+			"s.x..........x.s"
+			"s.x..........x.s"
+			"s.xxxxxxxxxxxx.s"
+			"s..............s"
+			"s.......x......s"
+			"s.......x......s"
+			"sp......x......s"
+			"sxxxxxxxxxxxxxxs"
+			"ssssssssssssssss";
+
+		
+		/*
+		
+		const char* Level =
+			"ssssssssssssssss"
+			"s.......xxxxxxxs"
+			"s.......x.c...cs"
+			"s.......x......s"
+			"s.......x......s"
+			"s.......xc.....s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.x.....x......s"
+			"s.......x......s"
+			"sp......x......s"
+			"sxxxxxxxx......s"
+			"ssssssssssssssss";
+		
+		/*
+		//NOTE(ian): this is neat :)
+		const char* Level =
+			"ssssssssssssssss"
+			"s.......xxxxxxxs"
+			"s.......x.....cs"
+			"s.......x......s"
+			"s.......x......s"
+			"s.......x......s"
+			"s..............s"
+			"s.......x......s"
+			"s.......x......s"
+			"s.......x......s"
+			"s..............s"
+			"s.......x......s"
+			"s.......x......s"
+			"sp......x......s"
+			"sxxxxxxxx......s"
+			"ssssssssssssssss";
+
+
+
+		*/
+
+		
+		/*
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..........x...s"
+			"s..h...........s"
+			"s.p............s"
+			"sxxxxx.........s"
+			"s....x.........s"
+			"s....xxxxxxxxxxs"
+			"s..............s"
+			"sxxxxxxxxxxxxxxs"
+			"ssssssssssssssss";
+
+
+
+		/*
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.....b....x...s"
+			"s....b.........s"
+			"s.p.b..........s"
+			"sxxxxx.........s"
+			"s....x.........s"
+			"s....xxxxxxxxxxs"
+			"s..............s"
+			"sxxxxxxxxxxxxxxs"
+			"ssssssssssssssss";
+
+		/*
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s....x.........s"
+			"s..............s"
+			"s....x.........s"
+			"s..............s"
+			"ssss...sssxxxxxs"
+			"ssbb...bbsxxxxxs"
+			"ssss...sssxxxxxs"
+			"s..............s"
+			"s...bx.b.......s"
+			"s......x.......s"
+			"s...b...b......s"
+			"s...x...x......s"
+			"sp.............s"
+			"sxxxxxxxxxxxxxxs"
+			"ssssssssssssssss";
+
+
+		/*
+		//NOTE(ian): hard level but it's not about something fundamental
+		const char* Level =
+			"ssssssssssssssss"
+			"s....x.........s"
+			"s..............s"
+			"s..............s"
+			"s...s.s........s"
+			"sxss...ssxxxxxxs"
+			"sxsb...bsxxxxxxs"
+			"sxss...ssxxxxxxs"
+			"s..............s"
+			"s...bx.b.......s"
+			"s......x.......s"
+			"s...b...b......s"
+			"s...x...x......s"
+			"sp.............s"
+			"sxxxxxxxxxxxxxxs"
+			"ssssssssssssssss";
+
+
+		/*
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.....sxxxxxxxxs"
+			"s..s...........s"
+			"s.....sxxxxxxxxs"
+			"s..............s"
+			"s..xbb.........s"
+			"s..............s"
+			"sp.............s"
+			"sxxxxxxxxxxxxxxx"
+			"ssssssssssssssss";
+
+		*/
+		/*
+		//NOTE(ian): keep/iterate
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s........b.....s"
+			"s.........b....s"
+			"s........x.....s"
+			"s..............s"
+			"sp.....b.x.....s"
+			"sxxxxxxxxxxs..ss"
+			"s.........s...ss"
+			"s........s...s.s"
+			"s.......s...s..s"
+			"s......s...s...s"
+			"s..............s"
+			"sxxxxxxxxxxxxxxs"
+			"ssssssssssssssss";
+
+		/*
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.b............s"
+			"s..b...........s"
+			"sp..b..s.....xxs"
+			"sxxxxxxxxbxxxbxs"
+			"ssssssssssssssss";
+
+		/*
+		const char* Level =
+			"ssssssssssssssss"
+			"s...x..........s"
+			"s......x......xs"
+			"s..............s"
+			"s..x......x....s"
+			"s..............s"
+			"s..............s"
+			"s.........x....s"
+			"s..............s"
+			"s......x......xs"
+			"s..............s"
+			"s...x.....x....s"
+			"s..............s"
+			"sp.............s"
+			"sxxxxxxxxxxxxxxx"
+			"ssssssssssssssss";
+
+		/*
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"sxxxxxsxxxxxxxxs"
+			"s.....x........s"
+			"s....xx........s"
+			"s....xx........s"
+			"s.......b......s"
+			"sp...x..bbb.xx.s"
+			"sxxxxxxxx.xxxxxs"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
+
+		/*
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s........xxxxxxs"
+			"s........x.....s"
+			"sp.......x.....s"
+			"sxxxxxxxxx.....s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
+
+
+		/*
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"sxxxx..........s"
+			"s...x..........s"
+			"s.......x......s"
+			"s..............s"
+			"s..............s"
+			"sp...b.........s"
+			"sxxxxxxxx......s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
+
+		/*
+
+		//NOTE(ian): this is great :)
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..ss.ssss.....s"
+			"sssss..........s"
+			"s..ss..........s"
+			"s..ss...xxx....s"
+			"s.....xxx..xx..s"
+			"s.....xx....xx.s"
+			"s.....x..xx..xxs"
+			"s...b...xxxx..ss"
+			"sxxx..xxxssss..s"
+			"s..xb.x..s..s..s"
+			"sp....x..s..s..s"
+			"sxxxxxx.....s..s"
+			"ssssssssssssssss";
+
+		
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..ss.ssss.....s"
+			"sssss.x........s"
+			"s..ss.x......xxs"
+			"s..ss.x.....ssss"
+			"s.....x........s"
+			"s.....xx.......s"
+			"s.....x..s.....s"
+			"s...b...sb..ssss"
+			"sxxx..xxxssss..s"
+			"s..xb.x..s..s..s"
+			"sp....x..s..s..s"
+			"sxxxxxx.....s..s"
+			"ssssssssssssssss";
+		
+		/*
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..ss.ssss.....s"
+			"sssss.x........s"
+			"s..ss.x......xxs"
+			"s..ss.x.....ssss"
+			"s.....x........s"
+			"s.....xx.......s"
+			"s.....x..s.....s"
+			"s...b...sb..ssss"
+			"sxxx..xxxssss..s"
+			"s..xb.x..s..s..s"
+			"sp....x..s..s..s"
+			"sxxxxxx.....s..s"
+			"ssssssssssssssss";
+
+		
 
 		const char* Level =
 			"ssssssssssssssss"
 			"s..............s"
 			"s..............s"
 			"s..ss.xxxx.....s"
-			"sssss.x......c.s"
+			"sssss.x........s"
 			"s..ss.x.....ssss"
 			"s..ss.x.....ssss"
+			"s.....x........s"
+			"s.....x........s"
+			"s.....x.xx.....s"
+			"s...b...xb..ssxs"
+			"sxxx..xxxx..s..s"
+			"s..xb.x.....s..s"
+			"sp....x.....s..s"
+			"sxxxxxx.....s..s"
+			"ssssssssssssssss";
+		
+		
+
+
+		/*
+		
+		//NOTE(ian): keep/iterate; this might be the better version of the one below
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s...........b..s"
+			"s...........x..s"
+			"s..............s"
+			"s............p.s"
+			"sssssssssssxxxxs"
+			"ssssssssssssssss";
+
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s...........b..s"
+			"s...........x..s"
+			"s..............s"
+			"s............p.s"
+			"s....ssssssxxxxs"
+			"s....s.........s"
+			"s....s.........s"
+			"s....s.........s"
+			"s....s.........s"
+			"ssssssssssssssss";
+
+
+		//NOTE(ian): should flying be allowed? and if so how to introduce it
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s...........b..s"
+			"s...........x..s"
+			"s..............s"
+			"s............p.s"
+			"sxx.........xxxs"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
+
+
+
+
+		/*
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..sssxxxx.....s"
+			"ssssssx........s"
+			"s..sssx.....ssss"
+			"s..sssx.....ssss"
 			"s.....xx....s..s"
-			"s.....x..s.....s"
+			"s.....x..s..s..s"
 			"s...b...sb..sxxs"
 			"sxxx..xxxs.....s"
 			"s..x..x..s.....s"
@@ -3883,7 +4790,6 @@ main(int argc, char* argv[])
 			"ssssssssssssssss";
 
 		/*
-		//NOTE(ian): keep/iterate; this might be the better version of the one below
 
 		const char* Level =
 			"ssssssssssssssss"
@@ -3906,7 +4812,7 @@ main(int argc, char* argv[])
 
 
 		
-		*/
+		
 		
 		/*
 		const char* Level =
@@ -3974,28 +4880,30 @@ main(int argc, char* argv[])
 			"ssssssssssssssss";
 
 
-		/*
+		
 		//NOTE(ian): keep/iterate - this is pretty cool
 		
 		const char* Level =
 			"ssssssssssssssss"
-			"sx.............s"
+			"s.xxxxxxxxxxxxxs"
+			"ss.xxxxxxxxxxxxs"
+			"s...xxxxxxxxxxxs"
+			"s....xxxxxxxxxxs"
+			"sxxxx..........s"
+			"sxxxxx.........s"
+			"sxxxxxx........s"
+			"sxxxxxxx.......s"
+			"sxxxxxxxx......s"
 			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s...x..........s"
-			"s....s.........s"
-			"s.....s........s"
-			"s......s.x.....s"
-			"s.........s....s"
-			"s..........s...s"
-			"sb..........s..s"
-			"s.b..........x.s"
-			"s..b....p......s"
+			"sb..........x..s"
+			"s.b........xxx.s"
+			"s..b....p.xxxxxs"
 			"sxxxxxxxxxxxxxxs"
 			"ssssssssssssssss";
 
 
+
+		/*
 		//NOTE(ian): keep/iterate - should i have this
 
 		const char* Level =
@@ -4079,7 +4987,112 @@ main(int argc, char* argv[])
 			"ssssssssssssssss";
 
 		*/
+
+		/*
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.....b..b..b..s"
+			"s.....xx.x.xx..s"
+			"s............p.s"
+			"sxxxxxxxxbxxxxxs"
+			"ssssssssssssssss";
 		
+		*/
+		
+				
+		/*
+		//NOTE(ian): keep/ iterate - this is pretty cool!
+		const char* Level =
+			"ssssssssssssssss"
+			"s............b.s"
+			"s............x.s"
+			"s..............s"
+			"ssssssssssssssss"
+			"s............b.s"
+			"s............x.s"
+			"s..............s"
+			"s............b.s"
+			"s............x.s"
+			"s..............s"
+			"sx...........p.s"
+			"ssssssssbsss.xxs"
+			"sxxxxxsbbbsxxxxs"
+			"sxxxxxsssssxxxxs"
+			"ssssssssssssssss";
+
+		*/
+		
+
+		/*
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..x.b.........s"
+			"s.xxxxxx.......s"
+			"s.x.........xxxs"
+			"s.x............s"
+			"s.x............s"
+			"s.p..b.........s"
+			"sxxxxxxx.......s"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
+
+		/*
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.......x......s"
+			"s..............s"
+			"sxxxxxxx.xxxxxxs"
+			"sbbbbbbb.bbbbbbs"
+			"sxxxxxxx.xxxxxxs"
+			"s........b.....s"
+			"s......b.......s"
+			"s......x.......s"
+			"s....x.b.x.....s"
+			"s............p.s"
+			"sxxxxxxbxxxxxxxs"
+			"ssssssssssssssss";
+
+		/*
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.......x......s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s......b.......s"
+			"s......x.......s"
+			"s....x.b.x.....s"
+			"s............p.s"
+			"sxxxxxxbxxxxxxxs"
+			"ssssssssssssssss";
+
 		/*
 		const char* Level =
 			"ssssssssssssssss"
@@ -4170,12 +5183,12 @@ main(int argc, char* argv[])
 			"ssssssssssssssss"
 			"s............xxs"
 			"s.....x.xb.....s"
-			"s.....x.sss....s"
-			"s.......x......s"
+			"s.....s.sss....s"
 			"s.......s......s"
-			"s.p..b..s......s"
-			"sxxxxxx.s......s"
-			"s.....sss......s"
+			"s.......s......s"
+			"s.p..b..x......s"
+			"sxxxxxx.x......s"
+			"s.....xxx......s"
 			"s..............s"
 			"s..............s"
 			"s..............s"
@@ -4245,8 +5258,8 @@ main(int argc, char* argv[])
 			"sx.............s"
 			"ssssssssssssssss";
 		
-
-		/*
+		
+		
 		//NOTE(ian): this is pretty good. Keep/iterate upon this concept!!!
 		const char* Level =
 			"ssssssssssssssss"
@@ -4254,9 +5267,9 @@ main(int argc, char* argv[])
 			"s..............s"
 			"s..............s"
 			"spb.b.b.b......s"
-			"sxxxxxxxs......s"
-			"s......s.......s"
-			"s......s.......s"
+			"sxxxxxxxsss....s"
+			"s..............s"
+			"s..............s"
 			"s..............s"
 			"s.............bs"
 			"s...........xxxs"
@@ -4265,18 +5278,40 @@ main(int argc, char* argv[])
 			"s..............s"
 			"s..............s"
 			"ssssssssssssssss";
+		*/
 
+		
+		//NOTE(ian): this is a good reprise :)
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s.......b......s"
+			"sp.....b.b.s...s"
+			"sx....b...b....s"
+			"s......b.b.....s"
+			"s.......b......s"
+			"s..............s"
+			"s..............s"
+			"s...........xxxs"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
 
-		//TODO(ian): check this puzzle!!!
+		/*
+
+		//NOTE(ian): this is a good reprise :)
 		const char* Level =
 			"ssssssssssssssss"
 			"s..............s"
 			"s..............s"
 			"s..............s"
-			"spb.b.b.b....xss"
-			"sxxxxxxxs...ssss"
-			"s......s.......s"
-			"s......s.......s"
+			"spb.b.b.b..s...s"
+			"sxxxxxxxs......s"
+			"s..............s"
+			"s..............s"
 			"s..............s"
 			"s.............bs"
 			"s...........xxxs"
@@ -4285,6 +5320,8 @@ main(int argc, char* argv[])
 			"s..............s"
 			"s..............s"
 			"ssssssssssssssss";
+
+
 		/*
 			enum block_attributes {
 			NO_ATTRIBUTE = 0,
@@ -4301,42 +5338,46 @@ main(int argc, char* argv[])
 		*/
 
 		GameState.PlayerIndex = -1;
-		for (u32 Y = 0;
+		for (s32 Y = 0;
 			Y < LEVELHEIGHT;
 			++Y)
 		{
-			for (u32 X = 0;
+			for (s32 X = 0;
 				X < LEVELWIDTH;
 				++X)
 			{
-				GameState.Grid[Y*LEVELWIDTH + X].Move = v2{ 0.0f,0.0f };
+				GameState.Grid[Y*LEVELWIDTH + X].Move = i2{ 0,0 };
 
 				if (Level[Y*LEVELWIDTH + X] == 'x')
 				{
-					GameState.Grid[Y*LEVELWIDTH+X].Properties = InitializeWallProperties();
+					GameState.Grid[(LEVELHEIGHT-Y-1)*LEVELWIDTH+X].Properties = InitializeWallProperties();
 				}
 				else if (Level[Y*LEVELWIDTH + X] == 'p')
 				{
-					GameState.PlayerIndex = Y * (u32)LEVELWIDTH + X;
-					GameState.Grid[Y*LEVELWIDTH + X].Properties = InitializePlayerProperties();
+					GameState.PlayerIndex = (u32)((LEVELHEIGHT-Y-1) * LEVELWIDTH + X);
+					GameState.Grid[(LEVELHEIGHT - Y - 1)*LEVELWIDTH + X].Properties = InitializePlayerProperties();
 
 				}
 				else if (Level[Y*LEVELWIDTH + X] == 'b')
 				{
-					GameState.Grid[Y*LEVELWIDTH + X].Properties = InitializeCrateProperties();
+					GameState.Grid[(LEVELHEIGHT - Y - 1)*LEVELWIDTH + X].Properties = InitializeCrateProperties();
 				}
 				else if (Level[Y*LEVELWIDTH + X] == 's')
 				{
-					GameState.Grid[Y*LEVELWIDTH + X].Properties = InitializeSpikeProperties();
+					GameState.Grid[(LEVELHEIGHT - Y - 1)*LEVELWIDTH + X].Properties = InitializeSpikeProperties();
 				}
 				else if (Level[Y*LEVELWIDTH + X] == 'c')
 				{
-					GameState.Grid[Y*LEVELWIDTH + X].Properties = InitializeCreatureProperties();
+					GameState.Grid[(LEVELHEIGHT - Y - 1)*LEVELWIDTH + X].Properties = InitializeCreatureProperties();
+				}
+				else if (Level[Y*LEVELWIDTH + X] == 'h')
+				{
+					GameState.Grid[(LEVELHEIGHT - Y - 1)*LEVELWIDTH + X].Properties = InitializeHingeProperties();
 				}
 				else
 				{
 					//TODO(ian): make a helper function for null blocks
-					GameState.Grid[Y*LEVELWIDTH + X].Properties = block_properties{ 0,0 };
+					GameState.Grid[(LEVELHEIGHT - Y - 1)*LEVELWIDTH + X].Properties = block_properties{ 0,0 };
 				}
 			}
 		}
@@ -4380,6 +5421,7 @@ main(int argc, char* argv[])
 
 	r32 SecondCounter = 0.0f;
 	u32 FPS = 0;
+	
 
 	while (Running)
 	{

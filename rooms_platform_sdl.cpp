@@ -445,6 +445,15 @@ TCosine(s32 Angle)
 	return Result;
 }
 
+inline i2
+TEuler(s32 Angle)
+{
+	i2 Result;
+	Result.X = TCosine(Angle);
+	Result.Y = TSine(Angle);
+	return Result;
+}
+
 
 
 //NOTE(ian): Assumes the angle is between 0 and 8
@@ -503,6 +512,15 @@ CCosine(s32 Angle)
 		Result = 1;
 	}
 
+	return Result;
+}
+
+inline i2
+CEuler(s32 Angle)
+{
+	i2 Result;
+	Result.X = CCosine(Angle);
+	Result.Y = CSine(Angle);
 	return Result;
 }
 
@@ -706,6 +724,15 @@ GetAngle(v2 A)
 	{
 		Result += TAU32;
 	}
+	return Result;
+}
+
+inline v2
+Euler(r32 Angle)
+{
+	v2 Result;
+	Result.X = Cosine(Angle);
+	Result.Y = Sine(Angle);
 	return Result;
 }
 
@@ -1809,6 +1836,7 @@ inline u32
 EraseBits(u32 Field, u32 Mask)
 {
 	u32 Result = (Field & ~Mask);
+	return Result;
 }
 
 
@@ -2305,12 +2333,13 @@ enum collision_layer {
 enum block_type {
 	EMPTY,
 	PLAYER,
-	WALL,
-	SPIKE,
-	CRATE,
-	SOUL,
 	CREATURE,
-	HINGE
+	CHEBYSHEV_WALL,
+	TAXICAB_WALL,
+	METRICLESS_WALL,
+	CHEBYSHEV_CRATE,
+	TAXICAB_CRATE,
+	METRICLESS_CRATE
 };
 
 enum block_attributes {
@@ -2456,12 +2485,14 @@ typedef struct {
 	u32 TotalStateBytes;
 	u32 TotalStateEntries;
 	r2 Screen;
-	texture Texture;
+	texture WallTextures[2];
+	texture BlockTextures[2];
 	texture PlayerTexture;
 	prng_state PRNG;
+	i2 PreviousMove;
 	u32 PlayerIndex;
 	b32 DiagonalMove;
-	b32 KilledEnemy;
+	b32 ChangeBlockType;
 	r32 AgainTime;
 	r64 tSine;
 	u16 SoundOffset;
@@ -2475,9 +2506,21 @@ typedef struct {
 
 
 inline block_properties
-InitializeSpikeProperties()
+InitializeMetriclessWallProperties()
 {
-	return block_properties{ SPIKE,STATIONARY };
+	return block_properties{ METRICLESS_WALL,STATIONARY };
+}
+
+inline block_properties
+InitializeChebyshevWallProperties()
+{
+	return block_properties{ CHEBYSHEV_WALL,STATIONARY };
+}
+
+inline block_properties
+InitializeTaxicabWallProperties()
+{
+	return block_properties{ TAXICAB_WALL,STATIONARY };
 }
 
 inline block_properties
@@ -2489,25 +2532,25 @@ InitializeCreatureProperties()
 inline block_properties
 InitializePlayerProperties()
 {
-	return block_properties{ PLAYER,ACCEPTS_INPUT | LINKS_TO_CRATES | STICKS_TO_WALLS | MOVABLE | STICKS_TO_HINGES | ABLE_TO_FALL | IMMEDIATE_FOOTING_ONLY};
+	return block_properties{ PLAYER,ACCEPTS_INPUT | LINKS_TO_CRATES | STICKS_TO_WALLS | MOVABLE | ABLE_TO_FALL | IMMEDIATE_FOOTING_ONLY};
 }
 
 inline block_properties
-InitializeWallProperties()
+InitializeMetriclessCrateProperties()
 {
-	return block_properties{ WALL,STATIONARY };
+	return block_properties{ METRICLESS_CRATE,LINKS_TO_CRATES | STICKS_TO_WALLS | STICKS_TO_HINGES | MOVABLE | ABLE_TO_FALL | IMMEDIATE_FOOTING_ONLY};
 }
 
 inline block_properties
-InitializeCrateProperties()
+InitializeChebyshevCrateProperties()
 {
-	return block_properties{ CRATE,LINKS_TO_CRATES | STICKS_TO_WALLS | STICKS_TO_HINGES | MOVABLE | ABLE_TO_FALL};
+	return block_properties{ CHEBYSHEV_CRATE,LINKS_TO_CRATES | STICKS_TO_WALLS | STICKS_TO_HINGES | MOVABLE | ABLE_TO_FALL };
 }
 
 inline block_properties
-InitializeHingeProperties()
+InitializeTaxicabCrateProperties()
 {
-	return block_properties{ HINGE,FLOATING | MOVABLE | LINKS_TO_HINGES };
+	return block_properties{ TAXICAB_CRATE,LINKS_TO_CRATES | STICKS_TO_WALLS | STICKS_TO_HINGES | MOVABLE | ABLE_TO_FALL };
 }
 
 inline b32
@@ -2525,24 +2568,44 @@ IsCreature(block_properties Properties)
 }
 
 inline b32
-IsWall(block_properties Properties)
+IsMetriclessWall(block_properties Properties)
 {
-	b32 Result = (Properties.Type == WALL);
-	return Result;
-}
-
-
-inline b32
-IsSpike(block_properties Properties)
-{
-	b32 Result = (Properties.Type == SPIKE);
+	b32 Result = (Properties.Type == METRICLESS_WALL);
 	return Result;
 }
 
 inline b32
-IsCrate(block_properties Properties)
+IsChebyshevWall(block_properties Properties)
 {
-	b32 Result = (Properties.Type == CRATE);
+	b32 Result = (Properties.Type == CHEBYSHEV_WALL);
+	return Result;
+}
+
+inline b32
+IsTaxicabWall(block_properties Properties)
+{
+	b32 Result = (Properties.Type == TAXICAB_WALL);
+	return Result;
+}
+
+inline b32
+IsMetriclessCrate(block_properties Properties)
+{
+	b32 Result = (Properties.Type == METRICLESS_CRATE);
+	return Result;
+}
+
+inline b32
+IsChebyshevCrate(block_properties Properties)
+{
+	b32 Result = (Properties.Type == CHEBYSHEV_CRATE);
+	return Result;
+}
+
+inline b32
+IsTaxicabCrate(block_properties Properties)
+{
+	b32 Result = (Properties.Type == TAXICAB_CRATE);
 	return Result;
 }
 
@@ -2550,13 +2613,6 @@ inline b32
 IsPlayer(block_properties Properties)
 {
 	b32 Result = (Properties.Type == PLAYER);
-	return Result;
-}
-
-inline b32
-IsHinge(block_properties Properties)
-{
-	b32 Result = (Properties.Type == HINGE);
 	return Result;
 }
 
@@ -2665,7 +2721,7 @@ UndoTurn(block *Grid, block_properties* PreviousState,u32* TotalStateBytes,u32* 
 internal void
 RestartTurn(block *Grid, block_properties* PreviousState, u32*TotalStateBytes, u32* TotalStateEntries)
 {
-	AddUndo(Grid, PreviousState, TotalStateBytes, TotalStateEntries);
+	//AddUndo(Grid, PreviousState, TotalStateBytes, TotalStateEntries);
 
 	for (u32 Y = 0;
 		Y < LEVELHEIGHT;
@@ -2689,6 +2745,9 @@ RestartTurn(block *Grid, block_properties* PreviousState, u32*TotalStateBytes, u
 	{
 		Grid[PreviousState[I + 1].Attributes*LEVELWIDTH + PreviousState[I + 1].Type].Properties = PreviousState[I];
 	}
+
+	*TotalStateBytes = 0;
+	*TotalStateEntries = 0;
 }
 
 
@@ -2715,6 +2774,80 @@ AlreadyTagged(u32* Indices, u32 NumIndices, u32 Index)
 internal void
 TagType(block* Grid, u32* Indices, u32* NumIndices, s32 X, s32 Y, u32 Type)
 {
+	s32 Delta = 1;
+	if (Type == TAXICAB_CRATE || Type == TAXICAB_WALL)
+	{
+		Delta = 2;
+	}
+	for (s32 I = 0;
+		I < 8;
+		I+=Delta)
+	{
+		i2 Vector = CEuler(I);
+		u32 Index = (u32)((Y + Vector.Y)*LEVELWIDTH + X + Vector.X);
+		block SurroundingCell = Grid[Index];
+		if (SurroundingCell.Properties.Type == Type)
+		{
+			if (!AlreadyTagged(Indices, *NumIndices, Index))
+			{
+				Indices[(*NumIndices)++] = Index;
+				TagType(Grid, Indices, NumIndices, X + Vector.X, Y + Vector.Y, Type);
+			}
+		}
+	}
+}
+
+
+
+internal b32
+IsSticky(block* Grid, u32* Indices, u32* NumIndices, s32 X, s32 Y)
+{
+	b32 Sticky = false;
+	for (s32 I = -1;
+		I < 2;
+		++I)
+	{
+		for (s32 J = -1;
+			J < 2;
+			++J)
+		{
+			//TODO(ian): this is way to specific; is the rule universal or is it dependent on type?
+			//TODO(ian): this causes an exception when player hits the edge of the level!!!
+			s32 Index = (Y + I)*LEVELWIDTH + X + J;
+			block SurroundingCell = Grid[Index];
+			
+			if (IsChebyshevWall(SurroundingCell.Properties))
+			{
+				Sticky = true;
+				break;
+			}
+			else if (IsChebyshevCrate(SurroundingCell.Properties))
+			{
+				if (!AlreadyTagged(Indices, *NumIndices, Index))
+				{
+					Indices[(*NumIndices)++] = (u32)Index;
+					if ((Sticky = IsSticky(Grid, Indices, NumIndices, X + J, Y + I)))
+					{
+						break;
+					}
+				}
+			}
+
+		}
+
+		if (Sticky)
+		{
+			break;
+		}
+	}
+
+	return Sticky;
+}
+
+internal b32
+TouchingMetriclessWall(block* Grid, u32* Indices, u32* NumIndices, s32 X, s32 Y, u32 Type = CHEBYSHEV_CRATE)
+{
+	b32 Touching = false;
 	for (s32 I = -1;
 		I < 2;
 		++I)
@@ -2725,189 +2858,79 @@ TagType(block* Grid, u32* Indices, u32* NumIndices, s32 X, s32 Y, u32 Type)
 		{
 			u32 Index = (u32)((Y + I)*LEVELWIDTH + X + J);
 			block SurroundingCell = Grid[Index];
+			if (IsMetriclessWall(SurroundingCell.Properties))
+			{
+				Touching = true;
+				break;
+			}
 			if (SurroundingCell.Properties.Type == Type)
 			{
 				if (!AlreadyTagged(Indices, *NumIndices, Index))
 				{
 					Indices[(*NumIndices)++] = Index;
-					TagType(Grid, Indices, NumIndices, X + J, Y + I, Type);
-				}
-			}
-		}
-	}
-}
-
-
-
-internal b32
-DetermineStickiness(block* Grid, u32* Indices, u32* NumIndices, u32 X, u32 Y)
-{
-	b32 NoFall = false;
-	for (u32 I = 0;
-		I < 3;
-		++I)
-	{
-		for (u32 J = 0;
-			J < 3;
-			++J)
-		{
-			//TODO(ian): this is way to specific; is the rule universal or is it dependent on type?
-			//TODO(ian): this causes an exception when player hits the edge of the level!!!
-			u32 Index = (Y + I - 1)*LEVELWIDTH + X + J - 1;
-			block SurroundingCell = Grid[Index];
-			if (IsWall(SurroundingCell.Properties))
-			{
-				NoFall = true;
-				break;
-			}
-			else if (IsCrate(SurroundingCell.Properties))// || IsCreature(SurroundingCell.Properties))
-			{
-				b32 Checked = false;
-				for (u32 K = 0;
-					K < *NumIndices;
-					++K)
-				{
-					if (Index == Indices[K])
-					{
-						Checked = true;
-						break;
-					}
-				}
-
-				if (!Checked)
-				{
-					Indices[(*NumIndices)++] = Index;
-					if ((NoFall = DetermineStickiness(Grid, Indices, NumIndices, X + J - 1, Y + I - 1)))
+					if (Touching = TouchingMetriclessWall(Grid, Indices, NumIndices, X + J, Y + I, Type))
 					{
 						break;
 					}
 				}
 			}
 		}
-
-		if (NoFall)
+		if (Touching)
 		{
 			break;
 		}
 	}
 
-	return NoFall;
+	return Touching;
 }
 
 internal b32
-DetermineLinking(block* Grid, u32* Indices, u32* NumIndices, u32 X, u32 Y)
+ChangingCrateType(block* Grid)
 {
-	b32 NoFall = false;
-	for (u32 I = 0;
-		I < 3;
-		++I)
+	b32 ChangesHappening = false;
+	for (s32 Y = 0;
+		Y < LEVELHEIGHT;
+		++Y)
 	{
-		for (u32 J = 0;
-			J < 3;
-			++J)
+		for (s32 X = 0;
+			X < LEVELWIDTH;
+			++X)
 		{
-			//TODO(ian): this is way to specific; is the rule universal or is it dependent on type?
-			//TODO(ian): this causes an exception when player hits the edge of the level!!!
-			u32 Index = (Y + I - 1)*LEVELWIDTH + X + J - 1;
+			s32 Index = Y * LEVELWIDTH + X;
 			block SurroundingCell = Grid[Index];
-			if (IsWall(SurroundingCell.Properties) || IsSpike(SurroundingCell.Properties))
+			if (IsChebyshevCrate(SurroundingCell.Properties))
 			{
-				NoFall = true;
-				break;
-			}
-			else if (IsCreature(SurroundingCell.Properties))
-			{
-				b32 Checked = false;
-				for (u32 K = 0;
-					K < *NumIndices;
-					++K)
+				u32 Indices[30];
+				u32 NumIndices = 0;
+				if (!IsSticky(Grid, Indices, &NumIndices, X, Y))
 				{
-					if (Index == Indices[K])
+					NumIndices = 0;
+					if (TouchingMetriclessWall(Grid, Indices, &NumIndices, X, Y, CHEBYSHEV_CRATE))
 					{
-						Checked = true;
-						break;
+						Grid[Index].Properties.Type = METRICLESS_CRATE;
+						Grid[Index].Properties.Attributes = SetBits(Grid[Index].Properties.Attributes, IMMEDIATE_FOOTING_ONLY);
+						ChangesHappening = true;
 					}
+					
 				}
-
-				if (!Checked)
+			}
+			else if(IsMetriclessCrate(SurroundingCell.Properties))
+			{
+				u32 Indices[30];
+				u32 NumIndices = 0;
+				if (IsSticky(Grid, Indices, &NumIndices, X, Y))
 				{
-					Indices[(*NumIndices)++] = Index;
-					if ((NoFall = DetermineLinking(Grid, Indices, NumIndices, X + J - 1, Y + I - 1)))
-					{
-						break;
-					}
+					Grid[Index].Properties.Type = CHEBYSHEV_CRATE;
+					Grid[Index].Properties.Attributes = EraseBits(Grid[Index].Properties.Attributes, IMMEDIATE_FOOTING_ONLY);
+					ChangesHappening = true;
 				}
 			}
 		}
-
-		if (NoFall)
-		{
-			break;
-		}
 	}
-
-	return NoFall;
+	return ChangesHappening;
 }
 
 
-internal b32
-DetermineFooting(block* Grid, u32* Indices, u32* NumIndices, u32 X, u32 Y)
-{
-	b32 NoFall = false;
-	u32 PrimaryIndex = (Y + 1)*LEVELWIDTH + X;
-	if (AreBitsSet(Grid[PrimaryIndex].Properties.Attributes, STATIONARY) || IsPlayer(Grid[PrimaryIndex].Properties) || IsHinge(Grid[PrimaryIndex].Properties))
-	{
-		return true;
-	}
-
-	for (u32 I = 0;
-		I < 3;
-		++I)
-	{
-		for (u32 J = 0;
-			J < 3;
-			++J)
-		{
-			if (I != 1 || J != 1)
-			{
-				//TODO(ian): this is way to specific; is the rule universal or is it dependent on type?
-				//TODO(ian): this causes an exception when player hits the edge of the level!!!
-				u32 Index = (Y + I - 1)*LEVELWIDTH + X + J - 1;
-				block SurroundingCell = Grid[Index];
-				if (IsCrate(SurroundingCell.Properties) || IsCreature(SurroundingCell.Properties))
-				{
-					b32 Checked = false;
-				for (u32 K = 0;
-K < *NumIndices;
-++K)
-{
-if (Index == Indices[K])
-{
-Checked = true;
-break;
-}
-}
-
-if (!Checked)
-{
-Indices[(*NumIndices)++] = Index;
-if ((NoFall = DetermineFooting(Grid, Indices, NumIndices, X + J - 1, Y + I - 1)))
-{
-break;
-}
-}
-}
-}
-}
-
-if (NoFall)
-{
-break;
-}
-}
-
-return NoFall;
-}
 
 
 
@@ -2922,19 +2945,7 @@ IsFalling(block* Grid, u32* Indices, u32* NumIndices, s32 X, s32 Y, block_proper
 		block_properties BlockUnderneathProperties = Grid[PrimaryIndex].Properties;
 		if (BlockUnderneathProperties.Type != BlockStuff.Type && BlockUnderneathProperties.Attributes != 0)
 		{
-			/*
-			if (IsCrate(Grid[PrimaryIndex].Properties))
-			{
-				Indices[(*NumIndices)++] = (u32)PrimaryIndex;
-				if (!IsFalling(Grid, Indices, NumIndices, X, Y - 1, BlockStuff, RecursionDepth + 1))
-				{
-					return false;
-				}
-			}
-			else
-			{*/
 			if (RecursionDepth == 0 || !AreBitsSet(BlockStuff.Attributes, IMMEDIATE_FOOTING_ONLY)) return false;
-			//}
 		}
 	}
 
@@ -2952,25 +2963,21 @@ IsFalling(block* Grid, u32* Indices, u32* NumIndices, s32 X, s32 Y, block_proper
 			block SurroundingCell = Grid[Index];
 			if (!AlreadyTagged(Indices, *NumIndices, Index))
 			{
-				if (IsWall(SurroundingCell.Properties) && AreBitsSet(BlockStuff.Attributes,STICKS_TO_WALLS))
+				if (IsChebyshevWall(SurroundingCell.Properties) && AreBitsSet(BlockStuff.Attributes,STICKS_TO_WALLS))
 				{
 					return false;
 				}
-				else if (IsSpike(SurroundingCell.Properties) && AreBitsSet(BlockStuff.Attributes, STICKS_TO_SPIKES))
+				else if (IsMetriclessWall(SurroundingCell.Properties) && AreBitsSet(BlockStuff.Attributes, STICKS_TO_SPIKES))
 				{
 					return false;
 				}
-				else if (IsCrate(SurroundingCell.Properties) && AreBitsSet(BlockStuff.Attributes, LINKS_TO_CRATES))
+				else if (IsChebyshevCrate(SurroundingCell.Properties) && AreBitsSet(BlockStuff.Attributes, LINKS_TO_CRATES))
 				{
 					Indices[(*NumIndices)++] = Index;
 					if (!IsFalling(Grid, Indices, NumIndices, X + J, Y + I, BlockStuff, RecursionDepth + 1))
 					{
 						return false;
 					}
-				}
-				else if (IsHinge(SurroundingCell.Properties) && AreBitsSet(BlockStuff.Attributes, STICKS_TO_HINGES))
-				{
-					return false;
 				}
 			}
 		}
@@ -3001,7 +3008,7 @@ AreAllBlocksMoving(game_state* GameState, u32* Indices, u32* NumIndices, u32 X, 
 		{
 
 			u32 Index = (Y + I - 1)*LEVELWIDTH + X + J - 1;
-			if (IsCrate(GameState->Grid[Index].Properties))
+			if (IsChebyshevCrate(GameState->Grid[Index].Properties))
 			{
 				b32 AlreadyFound = false;
 				for (u32 K = 0;
@@ -3048,7 +3055,7 @@ ApplyMoveToBlocks(game_state* GameState, u32* Indices, u32* NumIndices, i2 Move,
 		{
 
 			u32 Index = (u32)((Y + I)*LEVELWIDTH + X + J);
-			if (IsCrate(GameState->Grid[Index].Properties))
+			if (IsChebyshevCrate(GameState->Grid[Index].Properties))
 			{
 				if (!AlreadyTagged(Indices, *NumIndices, Index))
 				{
@@ -3061,39 +3068,6 @@ ApplyMoveToBlocks(game_state* GameState, u32* Indices, u32* NumIndices, i2 Move,
 	}
 }
 
-/*
-internal b32
-AcceptableCreaturePos(game_state* GameState, u32 X, u32 Y, u32 CurrentCreatureIndex)
-{
-	b32 AroundCrate = false;
-	for (u32 K = 0;
-		K < 3;
-		++K)
-	{
-		for (u32 L = 0;
-			L < 3;
-			++L)
-		{
-			if (IsCrate(GameState->Grid[(Y + K - 1)*LEVELWIDTH + X + L - 1].Properties))
-			{
-				AroundCrate = true;
-				break;
-
-			}
-		}
-		if (AroundCrate)
-		{
-			break;
-		}
-	}
-
-	u32 Indices[30]
-	b32 Result = !AroundCrate && (IsPlayer(GameState->Grid[Y*LEVELWIDTH + X].Properties) || GameState->Grid[Y*LEVELWIDTH + X].Properties.Attributes == 0);
-	Result = Result && !IsFalling(GameState->Grid,;
-
-	return Result;
-}
-*/
 
 internal b32
 ImplementMovingRules(game_state* GameState, i2 Move)
@@ -3107,156 +3081,65 @@ ImplementMovingRules(game_state* GameState, i2 Move)
 	PlayerPos.X = GameState->PlayerIndex%LEVELWIDTH;
 	PlayerPos.Y = GameState->PlayerIndex / LEVELWIDTH;
 
-	//b32 ExecuteHingeMove = false;
-	/*
-	if (TLength(Move) == 1)
-	{
-		u32 Indices[30]; //TODO(ian): This might eventually overflow! Find a more stable solution.
-		u32 NumIndices = 0;
-		u32 NumTaggings = 0;
-		for (s32 Y = -1;
-			Y < 2;
-			++Y)
-		{
-			b32 Cancel = false;
-			for (s32 X = -1;
-				X < 2;
-				++X)
-			{
-				s32 Index = (Y + PlayerPos.Y)*LEVELWIDTH + X + PlayerPos.X;
-				if (IsHinge(GameState->Grid[Index].Properties))
-				{
-					ExecuteHingeMove = true;
-					if (!AlreadyTagged(Indices, NumIndices, (u32)Index))
-					{
-						if (NumTaggings == 0)
-						{
-							++NumTaggings;
-							Indices[NumIndices++] = (u32)Index;
-							TagType(GameState->Grid, Indices, &NumIndices, PlayerX, PlayerY, HINGE);
-						}
-						else
-						{
-							ExecuteHingeMove = false;
-							Cancel = true;
-							break;
-						}
-					}
-				}
-			}
-
-			if (Cancel)
-			{
-				break;
-			}
-		}
-	}
-
-	//TODO(ian): Implement integer vectors and rects and integer math functions
-	if (ExecuteHingeMove)
-	{
-		//TODO(ian): implement more general moving function
-		//TODO(ian): implement bigger maps!!
-		
-
-		u32 BorderIndices[50];
-		u32 NumBorderIndices = 0;
-		for (s32 Y = 0;
-			Y < LEVELHEIGHT;
-			++Y)
-		{
-			for (s32 X = 0;
-				X < LEVELWIDTH;
-				++X)
-			{
-				
-			}
-		}
-
-
-	}
-	*/
-
-
-
-	
-
 
 	u32 AdjacentIndex = (PlayerPos.Y + Move.Y) * LEVELWIDTH + (Move.X + PlayerPos.X);
-	if (IsWall(GameState->Grid[AdjacentIndex].Properties) || IsSpike(GameState->Grid[AdjacentIndex].Properties)) //#2 Player against Wall/spike
+	if (IsChebyshevWall(GameState->Grid[AdjacentIndex].Properties) || IsMetriclessWall(GameState->Grid[AdjacentIndex].Properties)) //#2 Player against Wall/spike
 	{
 		GameState->Grid[GameState->PlayerIndex].Move = i2{ 0,0 };
-	}
-	else if (IsCreature(GameState->Grid[AdjacentIndex].Properties)) // #3 Player against creature
-	{
-		if (TLength(Move) > 1)
-		{
-			GameState->KilledEnemy = true;
-		}
-		else
-		{
-			GameState->Grid[GameState->PlayerIndex].Move = i2{ 0,0 };
-		}
 	}
 	else if (GameState->Grid[AdjacentIndex].Properties.Type == 0) // #4 Player in empty square
 	{
 		u32 Indices[30];
 		u32 NumIndices = 0;
 
-		if (!DetermineStickiness(GameState->Grid, Indices, &NumIndices, (AdjacentIndex%LEVELWIDTH), (AdjacentIndex / LEVELWIDTH)))
+		if (!IsSticky(GameState->Grid, Indices, &NumIndices, (AdjacentIndex%LEVELWIDTH), (AdjacentIndex / LEVELWIDTH)))
 		{
 			GameState->Grid[GameState->PlayerIndex].Move = i2{ 0,0 };
 		}
 	}
-	else if (IsHinge(GameState->Grid[AdjacentIndex].Properties))
-	{
-		GameState->Grid[GameState->PlayerIndex].Move = i2{ 0,0 };
-	}
-	else if (IsCrate(GameState->Grid[AdjacentIndex].Properties) || IsHinge(GameState->Grid[AdjacentIndex].Properties)) // #5  player pushes block
+	else if (IsMetriclessCrate(GameState->Grid[AdjacentIndex].Properties) || IsChebyshevCrate(GameState->Grid[AdjacentIndex].Properties)) // #5  player pushes block
 	{
 		GameState->Grid[AdjacentIndex].Move = Move;
+		
+		if (IsChebyshevCrate(GameState->Grid[AdjacentIndex].Properties))
+		{
+			u32 Indices[30];
+			u32 NumIndices = 0;
+			s32 X = (s32)AdjacentIndex % LEVELWIDTH;
+			s32 Y = (s32)AdjacentIndex / LEVELWIDTH;
+			ApplyMoveToBlocks(GameState, Indices, &NumIndices, Move, X, Y); // #6 Block 'pushes' blocks
+		}
 
-		u32 Indices[30];
-		u32 NumIndices = 0;
 
-		u32 x = AdjacentIndex % LEVELWIDTH;
-		u32 y = AdjacentIndex / LEVELWIDTH;
-		ApplyMoveToBlocks(GameState, Indices, &NumIndices, Move, x, y); // #6 Block 'pushes' blocks
-
-
-		/*
 		b32 FoundPattern;
-		// #7 block/hinge against block/hinge
+		// #7 block against block
 		do {
 			FoundPattern = false;
-			for (u32 Y = 1;
+			for (s32 Y = 1;
 				Y < LEVELHEIGHT - 1;
 				++Y)
 			{
-				for (u32 X = 1;
+				for (s32 X = 1;
 					X < LEVELWIDTH - 1;
 					++X)
 				{
 					block Cell = GameState->Grid[Y*LEVELWIDTH + X];
-					if ((IsCrate(Cell.Properties)||IsHinge(Cell.Properties)) && LengthSq(Cell.Move) > 0.0f)
+					if ((IsChebyshevCrate(Cell.Properties) || IsMetriclessCrate(Cell.Properties)) && TLength(Cell.Move) > 0)
 					{
-						u32 AdjacentIndex = (((Y*LEVELWIDTH + X) / LEVELWIDTH) + (u32)Cell.Move.Y) * LEVELWIDTH + ((u32)Cell.Move.X + (Y*LEVELWIDTH + X) % LEVELWIDTH);
-						if (IsWall(GameState->Grid[AdjacentIndex].Properties) || IsSpike(GameState->Grid[AdjacentIndex].Properties)
-							|| IsPlayer(GameState->Grid[AdjacentIndex].Properties) || IsHinge(GameState->Grid[AdjacentIndex].Properties))
+						s32 AdjacentIndex = (Y+Cell.Move.Y) * LEVELWIDTH + Cell.Move.X + X;
+						if (TLength(GameState->Grid[AdjacentIndex].Move) == 0)
 						{
-
-							GameState->Grid[Y*LEVELWIDTH + X].Move = v2{ 0.0f,0.0f };
-							FoundPattern = true;
-						}
-						else if (IsCreature(GameState->Grid[AdjacentIndex].Properties))
-						{
-							if (TLength(Cell.Move) > 1.0f)
+							if (IsChebyshevCrate(GameState->Grid[AdjacentIndex].Properties))
 							{
-								GameState->KilledEnemy = true;
+								u32 Indices[30];
+								u32 NumIndices = 0;
+								GameState->Grid[AdjacentIndex].Move = Cell.Move;
+								ApplyMoveToBlocks(GameState, Indices, &NumIndices, Cell.Move, X+Cell.Move.X, Y+Cell.Move.Y);
+								FoundPattern = true;
 							}
-							else
+							else if (IsMetriclessCrate(GameState->Grid[AdjacentIndex].Properties))
 							{
-								GameState->Grid[Y*LEVELWIDTH + X].Move = v2{ 0.0f,0.0f };
+								GameState->Grid[AdjacentIndex].Move = Cell.Move;
 								FoundPattern = true;
 							}
 						}
@@ -3265,65 +3148,60 @@ ImplementMovingRules(game_state* GameState, i2 Move)
 			}
 		} while (FoundPattern);
 
-		*/
 
 
 
 
-
-		b32 FoundPattern;
 		// #7 block against 'barrier'
 		do {
 			FoundPattern = false;
-			for (u32 Y = 1;
+			for (s32 Y = 1;
 				Y < LEVELHEIGHT - 1;
 				++Y)
 			{
-				for (u32 X = 1;
+				for (s32 X = 1;
 					X < LEVELWIDTH - 1;
 					++X)
 				{
 					block Cell = GameState->Grid[Y*LEVELWIDTH + X];
-					if (IsCrate(Cell.Properties) && LengthSq(Cell.Move) > 0.0f)
+					if ((IsChebyshevCrate(Cell.Properties)) && LengthSq(Cell.Move) > 0)
 					{
-						u32 AdjacentIndex = (((Y*LEVELWIDTH + X) / LEVELWIDTH) + (u32)Cell.Move.Y) * LEVELWIDTH + ((u32)Cell.Move.X + (Y*LEVELWIDTH + X) % LEVELWIDTH);
-						if (IsWall(GameState->Grid[AdjacentIndex].Properties) || IsSpike(GameState->Grid[AdjacentIndex].Properties)
-							|| IsPlayer(GameState->Grid[AdjacentIndex].Properties) || IsHinge(GameState->Grid[AdjacentIndex].Properties))
+						s32 AdjacentIndex = (Y + Cell.Move.Y) * LEVELWIDTH + Cell.Move.X + X;
+						if (IsChebyshevWall(GameState->Grid[AdjacentIndex].Properties) || IsMetriclessWall(GameState->Grid[AdjacentIndex].Properties)
+							|| IsPlayer(GameState->Grid[AdjacentIndex].Properties) || (IsChebyshevCrate(Cell.Properties) && LengthSq(Cell.Move) == 0)
+							|| (IsMetriclessCrate(Cell.Properties) && LengthSq(Cell.Move) > 0))
+						{
+							u32 Indices[30];
+							u32 NumIndices = 0;
+							GameState->Grid[Y*LEVELWIDTH + X].Move = i2{ 0,0 };
+							s32 X = AdjacentIndex % LEVELWIDTH;
+							s32 Y = AdjacentIndex / LEVELWIDTH;
+							ApplyMoveToBlocks(GameState, Indices, &NumIndices, i2{ 0,0 }, X,Y);
+							FoundPattern = true;
+						}
+					}
+					else if ((IsMetriclessCrate(Cell.Properties)) && LengthSq(Cell.Move) > 0)
+					{
+						s32 AdjacentIndex = (Y + Cell.Move.Y) * LEVELWIDTH + Cell.Move.X + X;
+						if (IsChebyshevWall(GameState->Grid[AdjacentIndex].Properties) || IsMetriclessWall(GameState->Grid[AdjacentIndex].Properties)
+							|| IsPlayer(GameState->Grid[AdjacentIndex].Properties) || (IsChebyshevCrate(Cell.Properties) && LengthSq(Cell.Move) == 0)
+								|| (IsMetriclessCrate(Cell.Properties) && LengthSq(Cell.Move) > 0))
 						{
 
 							GameState->Grid[Y*LEVELWIDTH + X].Move = i2{ 0,0 };
 							FoundPattern = true;
 						}
-						else if (IsCreature(GameState->Grid[AdjacentIndex].Properties))
-						{
-							if (TLength(Cell.Move) > 1)
-							{
-								GameState->KilledEnemy = true;
-							}
-							else
-							{
-								GameState->Grid[Y*LEVELWIDTH + X].Move = i2{ 0,0 };
-								FoundPattern = true;
-							}
-						}
 					}
+					
 				}
 			}
 		} while (FoundPattern);
 
 
-		NumIndices = 0;
-		if (!AreAllBlocksMoving(GameState, Indices, &NumIndices, x, y)) //#8 Cancel moves of blocks if one isn't moving
-		{
-			NumIndices = 0;
-			Move = i2{ 0,0 };
-			ApplyMoveToBlocks(GameState, Indices, &NumIndices, Move, x, y);
-		}
-
-
 
 		// #9 Player against stationary block
-		if (IsCrate(GameState->Grid[AdjacentIndex].Properties) && LengthSq(GameState->Grid[AdjacentIndex].Move) == 0)
+		if ((IsChebyshevCrate(GameState->Grid[AdjacentIndex].Properties) || IsMetriclessCrate(GameState->Grid[AdjacentIndex].Properties))
+			&& LengthSq(GameState->Grid[AdjacentIndex].Move) == 0)
 		{
 			GameState->Grid[GameState->PlayerIndex].Move = i2{ 0,0 };
 		}
@@ -3332,7 +3210,7 @@ ImplementMovingRules(game_state* GameState, i2 Move)
 
 	if (LengthSq(GameState->Grid[GameState->PlayerIndex].Move) > 0)
 	{
-		//TODO(ian): make sure the angle stuff is correct!!!
+		GameState->PreviousMove = Move;
 		MoveImplemented = true;
 		s32 Angle = GetAngle(Move);
 		if (Angle <= 1)
@@ -3462,7 +3340,7 @@ EnactGravity(game_state* GameState)
 			++X)
 		{
 			block Cell = GameState->Grid[Y*LEVELWIDTH + X];
-			if (IsPlayer(Cell.Properties) || IsCrate(Cell.Properties))
+			if (AreBitsSet(Cell.Properties.Attributes,ABLE_TO_FALL))
 			{
 				NumIndices = 0;
 				if (IsFalling(GameState->Grid, TempIndices, &NumIndices, X, Y, Cell.Properties))
@@ -3480,16 +3358,6 @@ EnactGravity(game_state* GameState)
 		}
 	}
 
-	for (u32 I = 0;
-		I < LEVELWIDTH*LEVELHEIGHT;
-		++I)
-	{
-		if (GameState->Grid[I].Properties.Attributes == GameState->Grid[I].Properties.Type && GameState->Grid[I].Properties.Type != 0)
-		{
-			int u = 9;
-		}
-	}
-
 	for (s32 Y = 0;
 		Y < LEVELHEIGHT;
 		++Y)
@@ -3499,20 +3367,10 @@ EnactGravity(game_state* GameState)
 			++X)
 		{
 			block Cell = GameState->Grid[Y*LEVELWIDTH + X];
-			if (IsCrate(Cell.Properties) || IsPlayer(Cell.Properties))
+			if (IsChebyshevCrate(Cell.Properties) || IsPlayer(Cell.Properties))
 			{
 				GameState->Grid[Y*LEVELWIDTH + X] = block{ i2{ 0,0 },block_properties{ 0,0 } };
 			}
-		}
-	}
-
-	for (u32 I = 0;
-		I < LEVELWIDTH*LEVELHEIGHT;
-		++I)
-	{
-		if (GameState->Grid[I].Properties.Attributes == GameState->Grid[I].Properties.Type && GameState->Grid[I].Properties.Type != 0)
-		{
-			int u = 9;
 		}
 	}
 
@@ -3523,24 +3381,13 @@ EnactGravity(game_state* GameState)
 	{
 		GameState->Grid[BlockIndices[I]] = Blocks[I];
 	}
-	
-
-	for (u32 I = 0;
-		I < LEVELWIDTH*LEVELHEIGHT;
-		++I)
-	{
-		if (GameState->Grid[I].Properties.Attributes == GameState->Grid[I].Properties.Type && GameState->Grid[I].Properties.Type != 0)
-		{
-			int u = 9;
-		}
-	}
 }
 
 internal void
 ExecuteTurn(game_state* GameState, u32 Pressed, u32 Held)
 {
 
-	GameState->DiagonalMove = GameState->KilledEnemy = false;
+	GameState->DiagonalMove = false;
 	
 
 	for (u32 Y = 1;
@@ -3621,7 +3468,6 @@ ExecuteTurn(game_state* GameState, u32 Pressed, u32 Held)
 		--GameState->TotalStateEntries;
 		GameState->TotalStateBytes -= GameState->PreviousState[GameState->TotalStateBytes - 1].Type + 1;
 	}
-	
 }
 
 internal void
@@ -3843,7 +3689,7 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 				++X)
 			{
 				block Cell = GameState->Grid[Y*LEVELWIDTH + X];
-				if (IsPlayer(Cell.Properties) || IsCrate(Cell.Properties))
+				if (AreBitsSet(Cell.Properties.Attributes,ABLE_TO_FALL))
 				{
 					NumIndices = 0;
 					if (IsFalling(GameState->Grid, Indices, &NumIndices, (s32)X, (s32)Y, GameState->Grid[Y*LEVELWIDTH + X].Properties))
@@ -3884,37 +3730,47 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 		}
 	}
 
+	GameState->ChangeBlockType = ChangingCrateType(GameState->Grid);
+
+
+
+
 	GameState->AgainTime += Input->dt;
-	if (!Falling)
+	if (!GameState->ChangeBlockType)
 	{
-		if (CLength(Move) != 0)
+		if (!Falling)
 		{
-			ExecuteTurn(GameState, Pressed, Held);
-			GameState->AgainTime = 0.0f;
-		}
-	}
-	else
-	{
-		if (GameState->AgainTime >= AgainTime)
-		{
-			for (u32 I = 0;
-				I < LEVELWIDTH*LEVELHEIGHT;
-				++I)
+			if (CLength(Move) != 0)
 			{
-				if (GameState->Grid[I].Properties.Attributes == GameState->Grid[I].Properties.Type && GameState->Grid[I].Properties.Type != 0)
+				if (!GameState->DiagonalMove)
 				{
-					int u = 9;
+					ExecuteTurn(GameState, Pressed, Held);
+					GameState->AgainTime = 0.0f;
+				}
+				else
+				{
+					if (GameState->AgainTime >= AgainTime)
+					{
+						GameState->AgainTime = 0.0f;
+						GameState->DiagonalMove = false;
+					}
 				}
 			}
-			GameState->AgainTime -= AgainTime;
-			EnactGravity(GameState);
-			for (u32 I = 0;
-				I < LEVELWIDTH*LEVELHEIGHT;
-				++I)
+		}
+		else
+		{
+			if (GameState->AgainTime >= AgainTime)
 			{
-				if (GameState->Grid[I].Properties.Attributes == GameState->Grid[I].Properties.Type && GameState->Grid[I].Properties.Type != 0)
+				GameState->AgainTime -= AgainTime;
+				EnactGravity(GameState);
+				for (u32 I = 0;
+					I < LEVELWIDTH*LEVELHEIGHT;
+					++I)
 				{
-					int u = 9;
+					if (GameState->Grid[I].Properties.Attributes == GameState->Grid[I].Properties.Type && GameState->Grid[I].Properties.Type != 0)
+					{
+						int u = 9;
+					}
 				}
 			}
 		}
@@ -3936,29 +3792,32 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 			++X)
 		{
 			block_properties Field = GameState->Grid[Y*LEVELWIDTH + X].Properties;
-			if (IsWall(Field))
+			if (IsChebyshevWall(Field))
 			{
-				DrawRect(*Window, GameState->Screen, r2{ v2{(r32)X,(r32)(LEVELHEIGHT-Y-1)},v2{1.0f,1.0f} }, v4{ 0.7f,0.8f,1.0f,1.0f });
+				
+				DrawRect(*Window, GameState->WallTextures[0],GameState->Screen, r2{ v2{(r32)X,(r32)(LEVELHEIGHT-Y-1)},v2{1.0f,1.0f} });
 			}
 			else if (IsPlayer(Field))
 			{
-				DrawRect(*Window, GameState->PlayerTexture, GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } });
+				r2 Box = r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } };
+				s32 Angle = GetAngle(GameState->PreviousMove);
+				DrawChebyshevBox(*Window, GameState->PlayerTexture, GameState->Screen, RectCenter(Box),Box, (r32)Angle, 0);
 			}
-			else if (IsCrate(Field))
+			else if (IsChebyshevCrate(Field))
 			{
-				DrawRect(*Window, GameState->Texture, GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } });
+				DrawRect(*Window, GameState->BlockTextures[0], GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } });
 			}
-			else if (IsSpike(Field))
+			else if (IsMetriclessWall(Field))
 			{
-				DrawRect(*Window, GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } }, v4{ 0.5f,0.2f,0.045f,1.0f });
+				DrawRect(*Window, GameState->WallTextures[1],GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } });
 			}
 			else if (IsCreature(Field))
 			{
 				DrawRect(*Window, GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } }, v4{ 0.3f,0.9f,0.645f,1.0f });
 			}
-			else if (IsHinge(Field))
+			else if (IsMetriclessCrate(Field))
 			{
-				DrawRect(*Window, GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } }, v4{ 0.1f,0.1f,0.545f,1.0f });
+				DrawRect(*Window, GameState->BlockTextures[1],GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } });
 			}
 			else if (Field.Attributes == 0 && Field.Type == 0)
 			{
@@ -4224,25 +4083,30 @@ main(int argc, char* argv[])
 		GameState.AgainTime = 0.0f;
 		Seed(&GameState.PRNG, 100);
 
-		GameState.Texture.Width = 64;
-		GameState.Texture.Height = 64;
-		GameState.Texture.Texels = (u32*)AllocateChunk(GameState.Texture.Width*GameState.Texture.Height * sizeof(u32));
+		GameState.BlockTextures[0].Width = 64;
+		GameState.BlockTextures[0].Height = 64;
+		GameState.BlockTextures[0].Texels = (u32*)AllocateChunk(GameState.BlockTextures[0].Width*GameState.BlockTextures[0].Height * sizeof(u32));
+		GameState.BlockTextures[1].Width = 64;
+		GameState.BlockTextures[1].Height = 64;
+		GameState.BlockTextures[1].Texels = (u32*)AllocateChunk(GameState.BlockTextures[1].Width*GameState.BlockTextures[1].Height * sizeof(u32));
+		GameState.WallTextures[0].Width = 64;
+		GameState.WallTextures[0].Height = 64;
+		GameState.WallTextures[0].Texels = (u32*)AllocateChunk(GameState.BlockTextures[0].Width*GameState.BlockTextures[0].Height * sizeof(u32));
+		GameState.WallTextures[1].Width = 64;
+		GameState.WallTextures[1].Height = 64;
+		GameState.WallTextures[1].Texels = (u32*)AllocateChunk(GameState.BlockTextures[1].Width*GameState.BlockTextures[1].Height * sizeof(u32));
 		
-		v2 Point = v2{ 0.0f,0.0f };
-
-		for (u32 y = 0;
-			y < GameState.Texture.Height;
+		for (s32 y = -32;
+			y < (s32)GameState.BlockTextures[0].Height/2;
 			++y)
 		{
-			for (u32 x = 0;
-				x < GameState.Texture.Width;
+			for (s32 x = -32;
+				x < (s32)GameState.BlockTextures[0].Width/2;
 				++x)
 			{
-				u32 r, g, b;
-				//r = 255 - (u32)(TDistance(Point, Center) * 255.0f/MaxT);
-				//g = 255 - (u32)(CDistance(Point, Center) * 255.0f / MaxC);
-				//b = 255 - (u32)(Distance(Point, Centerg) * 255.0f / MaxE);
-				if (x+y <= GameState.Texture.Width)
+				s32 r, g, b;
+				s32 value = Max(Abs(x), Abs(y));
+				if (value > 6 && value < 26)
 				{
 					r = 0;
 					g = 0;
@@ -4256,21 +4120,46 @@ main(int argc, char* argv[])
 				}
 
 
-				GameState.Texture.Texels[y*GameState.Texture.Width + x] = (r << 16) | (g << 8) | b;
+				GameState.WallTextures[0].Texels[(y+32)*(s32)GameState.BlockTextures[0].Width + x + 32] = (u32)((r << 16) | (g << 8) | b);
 
-				Point.X += 1.0f;
+
+				r = (value * 255 * 2) / GameState.BlockTextures[1].Width; 
+				g = b = r;
+
+
+				GameState.WallTextures[1].Texels[(y + 32)*(s32)GameState.BlockTextures[0].Width + x + 32] = (u32)((r << 16) | (g << 8) | b);
+
+
+				if(((value)&8) == 0)
+				{
+					r = 0;
+					g = 0;
+					b = 0;
+				}
+				else
+				{
+					r = 255;
+					g = 255;
+					b = 255;
+				}
+
+
+				GameState.BlockTextures[0].Texels[(y + 32)*(s32)GameState.BlockTextures[0].Width + x + 32] = (u32)((r << 16) | (g << 8) | b);
+
+
+				r = g = b = 128;
+
+
+				GameState.BlockTextures[1].Texels[(y + 32)*(s32)GameState.BlockTextures[0].Width + x + 32] = (u32)((r << 16) | (g << 8) | b);
 			}
-
-			Point.X = 0.0f;
-			Point.Y += 1.0f;
 		}
 
 		GameState.PlayerTexture.Width = 64;
 		GameState.PlayerTexture.Height = 64;
-		GameState.PlayerTexture.Texels = (u32*)AllocateChunk(GameState.Texture.Width*GameState.Texture.Height * sizeof(u32));
+		GameState.PlayerTexture.Texels = (u32*)AllocateChunk(GameState.BlockTextures[0].Width*GameState.BlockTextures[0].Height * sizeof(u32));
 
-		v2 Center = v2{ (r32)GameState.Texture.Width * -0.5f,(r32)GameState.Texture.Height * 0.5f };
-		Point = Center;
+		v2 Center = v2{ (r32)GameState.BlockTextures[0].Width * -0.5f,(r32)GameState.BlockTextures[0].Height * 0.5f };
+		v2 Point = Center;
 		v2 Triangle[3];
 		Triangle[0] = V2( 1.0f,0.0f ) * (r32)GameState.PlayerTexture.Width * 0.3f;
 		Triangle[1] = V2(Cosine(TAU32 / 3.0f), Sine(TAU32/3.0f)) * (r32)GameState.PlayerTexture.Width * 0.3f;
@@ -4983,7 +4872,7 @@ main(int argc, char* argv[])
 			"s..............s"
 			"s..............s"
 			"s..............s"
-			"sxxxxxxxxxxxxxxs"
+			"s..............s"
 			"ssssssssssssssss";
 
 
@@ -5392,7 +5281,7 @@ main(int argc, char* argv[])
 
 				if (Level[Y*LEVELWIDTH + X] == 'x')
 				{
-					GameState.Grid[(LEVELHEIGHT-Y-1)*LEVELWIDTH+X].Properties = InitializeWallProperties();
+					GameState.Grid[(LEVELHEIGHT-Y-1)*LEVELWIDTH+X].Properties = InitializeChebyshevWallProperties();
 				}
 				else if (Level[Y*LEVELWIDTH + X] == 'p')
 				{
@@ -5402,19 +5291,15 @@ main(int argc, char* argv[])
 				}
 				else if (Level[Y*LEVELWIDTH + X] == 'b')
 				{
-					GameState.Grid[(LEVELHEIGHT - Y - 1)*LEVELWIDTH + X].Properties = InitializeCrateProperties();
+					GameState.Grid[(LEVELHEIGHT - Y - 1)*LEVELWIDTH + X].Properties = InitializeChebyshevCrateProperties();
 				}
 				else if (Level[Y*LEVELWIDTH + X] == 's')
 				{
-					GameState.Grid[(LEVELHEIGHT - Y - 1)*LEVELWIDTH + X].Properties = InitializeSpikeProperties();
+					GameState.Grid[(LEVELHEIGHT - Y - 1)*LEVELWIDTH + X].Properties = InitializeMetriclessWallProperties();
 				}
 				else if (Level[Y*LEVELWIDTH + X] == 'c')
 				{
 					GameState.Grid[(LEVELHEIGHT - Y - 1)*LEVELWIDTH + X].Properties = InitializeCreatureProperties();
-				}
-				else if (Level[Y*LEVELWIDTH + X] == 'h')
-				{
-					GameState.Grid[(LEVELHEIGHT - Y - 1)*LEVELWIDTH + X].Properties = InitializeHingeProperties();
 				}
 				else
 				{
@@ -5429,6 +5314,7 @@ main(int argc, char* argv[])
 
 
 		Assert(GameState.PlayerIndex != -1);
+		GameState.PreviousMove = i2{ 1,0 };
 	}
 
 	u8 SoundData[8192] = {0};

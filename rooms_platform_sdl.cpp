@@ -2904,8 +2904,29 @@ ChangingCrateType(block* Grid)
 				u32 NumIndices = 0;
 				if (!IsSticky(Grid, Indices, &NumIndices, X, Y))
 				{
-					NumIndices = 0;
-					if (TouchingMetriclessWall(Grid, Indices, &NumIndices, X, Y, CHEBYSHEV_CRATE))
+					b32 AroundMetriclessWall = false;
+					for (s32 I = -1;
+						I < 2;
+						++I)
+					{
+						for (s32 J = -1;
+							J < 2;
+							++J)
+						{
+							if (IsMetriclessWall(Grid[(Y + I)*LEVELWIDTH + X + J].Properties))
+							{
+								AroundMetriclessWall = true;
+								break;
+							}
+						}
+
+						if (AroundMetriclessWall)
+						{
+							break;
+						}
+					}
+
+					if (AroundMetriclessWall)
 					{
 						Grid[Index].Properties.Type = METRICLESS_CRATE;
 						Grid[Index].Properties.Attributes = SetBits(Grid[Index].Properties.Attributes, IMMEDIATE_FOOTING_ONLY);
@@ -3185,7 +3206,7 @@ ImplementMovingRules(game_state* GameState, i2 Move)
 						s32 AdjacentIndex = (Y + Cell.Move.Y) * LEVELWIDTH + Cell.Move.X + X;
 						if (IsChebyshevWall(GameState->Grid[AdjacentIndex].Properties) || IsMetriclessWall(GameState->Grid[AdjacentIndex].Properties)
 							|| IsPlayer(GameState->Grid[AdjacentIndex].Properties) || (IsChebyshevCrate(Cell.Properties) && LengthSq(Cell.Move) == 0)
-								|| (IsMetriclessCrate(Cell.Properties) && LengthSq(Cell.Move) > 0))
+								|| (IsMetriclessCrate(Cell.Properties) && LengthSq(Cell.Move) == 0))
 						{
 
 							GameState->Grid[Y*LEVELWIDTH + X].Move = i2{ 0,0 };
@@ -3367,7 +3388,7 @@ EnactGravity(game_state* GameState)
 			++X)
 		{
 			block Cell = GameState->Grid[Y*LEVELWIDTH + X];
-			if (IsChebyshevCrate(Cell.Properties) || IsPlayer(Cell.Properties))
+			if (AreBitsSet(Cell.Properties.Attributes, ABLE_TO_FALL))
 			{
 				GameState->Grid[Y*LEVELWIDTH + X] = block{ i2{ 0,0 },block_properties{ 0,0 } };
 			}
@@ -3749,7 +3770,7 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 				}
 				else
 				{
-					if (GameState->AgainTime >= AgainTime)
+					if (GameState->AgainTime >= AgainTime*0.3f)
 					{
 						GameState->AgainTime = 0.0f;
 						GameState->DiagonalMove = false;
@@ -4850,12 +4871,8 @@ main(int argc, char* argv[])
 			"sp......xs.....s"
 			"sxxxxxxxxsssssss"
 			"ssssssssssssssss";
-		*/
-
 		
-		//TODO(ian): get rid of flying!!
-		//TODO(ian): have it so that blocks connect to each other according to the wall-type they are attached to
-		//TODO(ian): get rid of sticky blocks when not connected to wall
+
 		//TODO(ian): implement taxicab metric walls
 		const char* Level =
 			"ssssssssssssssss"
@@ -4872,7 +4889,7 @@ main(int argc, char* argv[])
 			"s..............s"
 			"s..............s"
 			"s..............s"
-			"s..............s"
+			"s..............fs"
 			"ssssssssssssssss";
 
 
@@ -5188,27 +5205,29 @@ main(int argc, char* argv[])
 			"s..............s"
 			"ssssssssssssssss";
 		
-		/*
+		*/
 		
+		//TODO(ian): pushing a chebyshev block ontop of a metricless block deletes the metricless block!!!!
+		//TODO(ian): need to find out whether the diagonal control scheme is simple enough to be found out by accident!!
 		//NOTE(ian): this is pretty good. Keep/iterate upon this concept!!!
 		const char* Level =
 			"ssssssssssssssss"
 			"s..............s"
 			"s..............s"
 			"s..............s"
-			"spb.b.b.b......s"
-			"sxxxxxxxsss....s"
+			"sp....b.b......s"
+			"sxxxxxxxxs.....s"
 			"s..............s"
 			"s..............s"
 			"s..............s"
-			"s.............bs"
-			"s...........xxxs"
-			"s..............s"
-			"s..............s"
+			"s.............ss"
+			"s.............ss"
+			"s..........b...s"
+			"s..........xxxxs"
 			"s..............s"
 			"s..............s"
 			"ssssssssssssssss";
-		*/
+		
 
 		/*
 		//NOTE(ian): this is a good reprise :)
@@ -5238,20 +5257,20 @@ main(int argc, char* argv[])
 			"s..............s"
 			"s..............s"
 			"s..............s"
-			"spb.b.b.b...s..s"
+			"sp..b.b...s....s"
 			"sxxxxxxxs......s"
 			"s..............s"
 			"s..............s"
 			"s..............s"
 			"s.............bs"
-			"s............xxs"
+			"s..........xxxxs"
 			"s..............s"
 			"s..............s"
 			"s..............s"
 			"s..............s"
 			"ssssssssssssssss";
+		
 		*/
-
 
 		/*
 			enum block_attributes {
@@ -5292,6 +5311,10 @@ main(int argc, char* argv[])
 				else if (Level[Y*LEVELWIDTH + X] == 'b')
 				{
 					GameState.Grid[(LEVELHEIGHT - Y - 1)*LEVELWIDTH + X].Properties = InitializeChebyshevCrateProperties();
+				}
+				else if (Level[Y*LEVELWIDTH + X] == 'd')
+				{
+					GameState.Grid[(LEVELHEIGHT - Y - 1)*LEVELWIDTH + X].Properties = InitializeMetriclessCrateProperties();
 				}
 				else if (Level[Y*LEVELWIDTH + X] == 's')
 				{

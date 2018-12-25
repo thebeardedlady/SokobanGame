@@ -278,6 +278,15 @@ I2(s32 X, s32 Y)
 	return Result;
 }
 
+inline i2
+I2(r32 X, r32 Y)
+{
+	i2 Result;
+	Result.X = (s32)X;
+	Result.Y = (s32)Y;
+	return Result;
+}
+
 inline s32
 Inner(i2 A, i2 B)
 {
@@ -576,6 +585,15 @@ union v2 {
 };
 
 
+inline i2
+I2(v2 A)
+{
+	i2 Result;
+	Result.X = (s32)A.X;
+	Result.Y = (s32)A.Y;
+	return Result;
+}
+
 inline v2
 operator+(v2 A, v2 B)
 {
@@ -668,6 +686,24 @@ V2(r32 X, r32 Y)
 	v2 Result;
 	Result.X = X;
 	Result.Y = Y;
+	return Result;
+}
+
+inline v2
+V2(s32 X, s32 Y)
+{
+	v2 Result;
+	Result.X = (r32)X;
+	Result.Y = (r32)Y;
+	return Result;
+}
+
+inline v2
+V2(i2 A)
+{
+	v2 Result;
+	Result.X = (r32)A.X;
+	Result.Y = (r32)A.Y;
 	return Result;
 }
 
@@ -2964,7 +3000,12 @@ IsFalling(block* Grid, u32* Indices, u32* NumIndices, s32 X, s32 Y, block_proper
 	{
 		s32 PrimaryIndex = (Y - 1)*LEVELWIDTH + X;
 		block_properties BlockUnderneathProperties = Grid[PrimaryIndex].Properties;
-		if (BlockUnderneathProperties.Type != BlockStuff.Type && BlockUnderneathProperties.Attributes != 0)
+		b32 IsType = BlockUnderneathProperties.Type == BlockStuff.Type;
+		if (BlockStuff.Type == METRICLESS_CRATE)
+		{
+			IsType = (BlockUnderneathProperties.Type == EMPTY);
+		}
+		if (!IsType && BlockUnderneathProperties.Attributes != 0)
 		{
 			if (RecursionDepth == 0 || !AreBitsSet(BlockStuff.Attributes, IMMEDIATE_FOOTING_ONLY)) return false;
 		}
@@ -3094,6 +3135,18 @@ internal b32
 ImplementMovingRules(game_state* GameState, i2 Move)
 {
 
+	for (u32 Y = 1;
+		Y < LEVELHEIGHT;
+		++Y)
+	{
+		for (u32 X = 1;
+			X < LEVELWIDTH;
+			++X)
+		{
+			GameState->Grid[Y*LEVELWIDTH + X].Move = i2{ 0,0 };
+		}
+	}
+
 	b32 MoveImplemented = false;
 
 	// #1 1. Apply direction to player
@@ -3147,20 +3200,20 @@ ImplementMovingRules(game_state* GameState, i2 Move)
 					block Cell = GameState->Grid[Y*LEVELWIDTH + X];
 					if ((IsChebyshevCrate(Cell.Properties) || IsMetriclessCrate(Cell.Properties)) && TLength(Cell.Move) > 0)
 					{
-						s32 AdjacentIndex = (Y+Cell.Move.Y) * LEVELWIDTH + Cell.Move.X + X;
-						if (TLength(GameState->Grid[AdjacentIndex].Move) == 0)
+						s32 NearbyIndex = (Y+Cell.Move.Y) * LEVELWIDTH + Cell.Move.X + X;
+						if (TLength(GameState->Grid[NearbyIndex].Move) == 0)
 						{
-							if (IsChebyshevCrate(GameState->Grid[AdjacentIndex].Properties))
+							if (IsChebyshevCrate(GameState->Grid[NearbyIndex].Properties))
 							{
 								u32 Indices[30];
 								u32 NumIndices = 0;
-								GameState->Grid[AdjacentIndex].Move = Cell.Move;
+								GameState->Grid[NearbyIndex].Move = Cell.Move;
 								ApplyMoveToBlocks(GameState, Indices, &NumIndices, Cell.Move, X+Cell.Move.X, Y+Cell.Move.Y);
 								FoundPattern = true;
 							}
-							else if (IsMetriclessCrate(GameState->Grid[AdjacentIndex].Properties))
+							else if (IsMetriclessCrate(GameState->Grid[NearbyIndex].Properties))
 							{
-								GameState->Grid[AdjacentIndex].Move = Cell.Move;
+								GameState->Grid[NearbyIndex].Move = Cell.Move;
 								FoundPattern = true;
 							}
 						}
@@ -3187,26 +3240,26 @@ ImplementMovingRules(game_state* GameState, i2 Move)
 					block Cell = GameState->Grid[Y*LEVELWIDTH + X];
 					if ((IsChebyshevCrate(Cell.Properties)) && LengthSq(Cell.Move) > 0)
 					{
-						s32 AdjacentIndex = (Y + Cell.Move.Y) * LEVELWIDTH + Cell.Move.X + X;
-						if (IsChebyshevWall(GameState->Grid[AdjacentIndex].Properties) || IsMetriclessWall(GameState->Grid[AdjacentIndex].Properties)
-							|| IsPlayer(GameState->Grid[AdjacentIndex].Properties) || (IsChebyshevCrate(Cell.Properties) && LengthSq(Cell.Move) == 0)
-							|| (IsMetriclessCrate(Cell.Properties) && LengthSq(Cell.Move) > 0))
+						s32 NearbyIndex = (Y + Cell.Move.Y) * LEVELWIDTH + Cell.Move.X + X;
+						if (IsChebyshevWall(GameState->Grid[NearbyIndex].Properties) || IsMetriclessWall(GameState->Grid[NearbyIndex].Properties)
+							|| IsPlayer(GameState->Grid[NearbyIndex].Properties) || (IsChebyshevCrate(GameState->Grid[NearbyIndex].Properties) && LengthSq(GameState->Grid[NearbyIndex].Move) == 0)
+							|| (IsMetriclessCrate(GameState->Grid[NearbyIndex].Properties) && LengthSq(GameState->Grid[NearbyIndex].Move) == 0))
 						{
 							u32 Indices[30];
 							u32 NumIndices = 0;
 							GameState->Grid[Y*LEVELWIDTH + X].Move = i2{ 0,0 };
-							s32 X = AdjacentIndex % LEVELWIDTH;
-							s32 Y = AdjacentIndex / LEVELWIDTH;
-							ApplyMoveToBlocks(GameState, Indices, &NumIndices, i2{ 0,0 }, X,Y);
+							s32 x = AdjacentIndex % LEVELWIDTH;
+							s32 y = AdjacentIndex / LEVELWIDTH;
+							ApplyMoveToBlocks(GameState, Indices, &NumIndices, i2{ 0,0 }, x,y);
 							FoundPattern = true;
 						}
 					}
 					else if ((IsMetriclessCrate(Cell.Properties)) && LengthSq(Cell.Move) > 0)
 					{
-						s32 AdjacentIndex = (Y + Cell.Move.Y) * LEVELWIDTH + Cell.Move.X + X;
-						if (IsChebyshevWall(GameState->Grid[AdjacentIndex].Properties) || IsMetriclessWall(GameState->Grid[AdjacentIndex].Properties)
-							|| IsPlayer(GameState->Grid[AdjacentIndex].Properties) || (IsChebyshevCrate(Cell.Properties) && LengthSq(Cell.Move) == 0)
-								|| (IsMetriclessCrate(Cell.Properties) && LengthSq(Cell.Move) == 0))
+						s32 NearbyIndex = (Y + Cell.Move.Y) * LEVELWIDTH + Cell.Move.X + X;
+						if (IsChebyshevWall(GameState->Grid[NearbyIndex].Properties) || IsMetriclessWall(GameState->Grid[NearbyIndex].Properties)
+							|| IsPlayer(GameState->Grid[NearbyIndex].Properties) || (IsChebyshevCrate(GameState->Grid[NearbyIndex].Properties) && LengthSq(GameState->Grid[NearbyIndex].Move) == 0)
+							|| (IsMetriclessCrate(GameState->Grid[NearbyIndex].Properties) && LengthSq(GameState->Grid[NearbyIndex].Move) == 0))
 						{
 
 							GameState->Grid[Y*LEVELWIDTH + X].Move = i2{ 0,0 };
@@ -3409,19 +3462,6 @@ ExecuteTurn(game_state* GameState, u32 Pressed, u32 Held)
 {
 
 	GameState->DiagonalMove = false;
-	
-
-	for (u32 Y = 1;
-		Y < LEVELHEIGHT;
-		++Y)
-	{
-		for (u32 X = 1;
-			X < LEVELWIDTH;
-			++X)
-		{
-			GameState->Grid[Y*LEVELWIDTH + X].Move = i2{ 0,0 };
-		}
-	}
 
 	i2 Move = i2{ 0,0 };
 
@@ -3527,37 +3567,29 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 
 
 	i2 Move = { 0 };
-	r32 AgainTime = 0.25f;
+	r32 AgainTime = 0.2f;
 	u32 Pressed = 0, Held = 0;
 	if (!Input->Up.PreviousPressed && Input->Up.CurrentPressed)
 	{
 		Pressed |= UP;
 	}
 
-
 	if (!Input->Down.PreviousPressed && Input->Down.CurrentPressed)
 	{
 		Pressed |= DOWN;
 	}
-	
-	
-	
-	
 
 	if (!Input->Left.PreviousPressed && Input->Left.CurrentPressed)
 	{
 		Pressed |= LEFT;
 	}
-	
-	
-	
-	
-	
 
 	if (!Input->Right.PreviousPressed && Input->Right.CurrentPressed)
 	{
 		Pressed |= RIGHT;
 	}
+
+
 
 	if (Pressed)
 	{
@@ -4243,7 +4275,7 @@ main(int argc, char* argv[])
 
 
 		//TODO(ian): make level editor!!! support a big world!!!!
-		//Number of puzzles so far: ~19
+		//Number of puzzles so far: ~20
 
 		/*
 		const char* Level =
@@ -4265,126 +4297,25 @@ main(int argc, char* argv[])
 			"ssssssssssssssss";
 
 		
+		
+
 		/*
 		
-		const char* Level =
-			"ssssssssssssssss"
-			"s.......xxxxxxxs"
-			"s.......x.c...cs"
-			"s.......x......s"
-			"s.......x......s"
-			"s.......xc.....s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s.x.....x......s"
-			"s.......x......s"
-			"sp......x......s"
-			"sxxxxxxxx......s"
-			"ssssssssssssssss";
 		
-		/*
-		//NOTE(ian): this is neat :)
-		const char* Level =
-			"ssssssssssssssss"
-			"s.......xxxxxxxs"
-			"s.......x.....cs"
-			"s.......x......s"
-			"s.......x......s"
-			"s.......x......s"
-			"s..............s"
-			"s.......x......s"
-			"s.......x......s"
-			"s.......x......s"
-			"s..............s"
-			"s.......x......s"
-			"s.......x......s"
-			"sp......x......s"
-			"sxxxxxxxx......s"
-			"ssssssssssssssss";
-
-
-
-		*/
-
 		
-		/*
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..........x...s"
-			"s..h...........s"
-			"s.p............s"
-			"sxxxxx.........s"
-			"s....x.........s"
-			"s....xxxxxxxxxxs"
-			"s..............s"
-			"sxxxxxxxxxxxxxxs"
-			"ssssssssssssssss";
-
-
-
-		/*
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s.....b....x...s"
-			"s....b.........s"
-			"s.p.b..........s"
-			"sxxxxx.........s"
-			"s....x.........s"
-			"s....xxxxxxxxxxs"
-			"s..............s"
-			"sxxxxxxxxxxxxxxs"
-			"ssssssssssssssss";
-
-		/*
-
-		const char* Level =
-			"ssssssssssssssss"
-			"s....x.........s"
-			"s..............s"
-			"s....x.........s"
-			"s..............s"
-			"ssss...sssxxxxxs"
-			"ssbb...bbsxxxxxs"
-			"ssss...sssxxxxxs"
-			"s..............s"
-			"s...bx.b.......s"
-			"s......x.......s"
-			"s...b...b......s"
-			"s...x...x......s"
-			"sp.............s"
-			"sxxxxxxxxxxxxxxs"
-			"ssssssssssssssss";
-
-
-		/*
 		//NOTE(ian): hard level but it's not about something fundamental
 		const char* Level =
 			"ssssssssssssssss"
 			"s....x.........s"
 			"s..............s"
 			"s..............s"
-			"s...s.s........s"
-			"sxss...ssxxxxxxs"
-			"sxsb...bsxxxxxxs"
-			"sxss...ssxxxxxxs"
 			"s..............s"
-			"s...bx.b.......s"
-			"s......x.......s"
+			"sxxx...xxxxxxxxs"
+			"sxbb...bbxxxxxxs"
+			"sxxx...xxxxxxxxs"
+			"s..............s"
+			"s...b..b.......s"
+			"s....x.x.......s"
 			"s...b...b......s"
 			"s...x...x......s"
 			"sp.............s"
@@ -4412,25 +4343,6 @@ main(int argc, char* argv[])
 			"ssssssssssssssss";
 
 		*/
-		/*
-		//NOTE(ian): keep/iterate
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s........b.....s"
-			"s.........b....s"
-			"s........x.....s"
-			"s..............s"
-			"sp.....b.x.....s"
-			"sxxxxxxxxxxs..ss"
-			"s.........s...ss"
-			"s........s...s.s"
-			"s.......s...s..s"
-			"s......s...s...s"
-			"s..............s"
-			"sxxxxxxxxxxxxxxs"
-			"ssssssssssssssss";
 
 		/*
 
@@ -4531,9 +4443,9 @@ main(int argc, char* argv[])
 			"s..............s"
 			"s..............s"
 			"ssssssssssssssss";
-
+		*/
+		
 		/*
-
 		//NOTE(ian): this is great :)
 
 		const char* Level =
@@ -4553,46 +4465,8 @@ main(int argc, char* argv[])
 			"sp....x..s..s..s"
 			"sxxxxxx.....s..s"
 			"ssssssssssssssss";
-
-		
-
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..ss.ssss.....s"
-			"sssss.x........s"
-			"s..ss.x......xxs"
-			"s..ss.x.....ssss"
-			"s.....x........s"
-			"s.....xx.......s"
-			"s.....x..s.....s"
-			"s...b...sb..ssss"
-			"sxxx..xxxssss..s"
-			"s..xb.x..s..s..s"
-			"sp....x..s..s..s"
-			"sxxxxxx.....s..s"
-			"ssssssssssssssss";
 		
 		/*
-
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..ss.ssss.....s"
-			"sssss.x........s"
-			"s..ss.x......xxs"
-			"s..ss.x.....ssss"
-			"s.....x........s"
-			"s.....xx.......s"
-			"s.....x..s.....s"
-			"s...b...sb..ssss"
-			"sxxx..xxxssss..s"
-			"s..xb.x..s..s..s"
-			"sp....x..s..s..s"
-			"sxxxxxx.....s..s"
-			"ssssssssssssssss";
 		
 		
 		//NOTE(ian): much better
@@ -4600,7 +4474,7 @@ main(int argc, char* argv[])
 			"ssssssssssssssss"
 			"s..............s"
 			"s..............s"
-			"s...s.xx.......s"
+			"s.....xx.......s"
 			"s.....x........s"
 			"s.....s......xxs"
 			"s.....s........s"
@@ -4613,73 +4487,9 @@ main(int argc, char* argv[])
 			"sp......x......s"
 			"sxxxxxxxx......s"
 			"ssssssssssssssss";
-		
-		
 
 
-		/*
-		
-		
-
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s...........b..s"
-			"s...........x..s"
-			"s..............s"
-			"s............p.s"
-			"sssssssssssxxxxs"
-			"ssssssssssssssss";
-
-
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s...........b..s"
-			"s...........x..s"
-			"s..............s"
-			"s............p.s"
-			"s....ssssssxxxxs"
-			"s....s.........s"
-			"s....s.........s"
-			"s....s.........s"
-			"s....s.........s"
-			"ssssssssssssssss";
-
-
-		//NOTE(ian): should flying be allowed? and if so how to introduce it
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s...........b..s"
-			"s...........x..s"
-			"s..............s"
-			"s............p.s"
-			"sxx.........xxxs"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"ssssssssssssssss";
-
-
-
+		*/
 		/*
 		const char* Level =
 			"ssssssssssssssss"
@@ -4691,13 +4501,34 @@ main(int argc, char* argv[])
 			"s..............s"
 			"s..............s"
 			"s..............s"
+			"s....s.........s"
 			"s..............s"
-			"s...........b..s"
-			"s...........x..s"
-			"s..............s"
-			"s............p.s"
-			"sssssssssssxxxxs"
+			"s...b..........s"
+			"s...b..........s"
+			"sp..bx.........s"
+			"sxxxxx.........s"
 			"ssssssssssssssss";
+
+
+		/*
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.b............s"
+			"sxxx........xxxs"
+			"sx............xs"
+			"sx............xs"
+			"sx............xs"
+			"sx............xs"
+			"sx............xs"
+			"sp............xs"
+			"sxxssssssssssxxs"
+			"ssssssssssssssss";
+
 
 		/*
 
@@ -4722,18 +4553,18 @@ main(int argc, char* argv[])
 			"ssssssssssssssss";
 
 
-		/*
+		
 
 
 
 		//NOTE(ian): keep/iterate - this concept should be taught
 		const char* Level =
 			"ssssssssssssssss"
-			"s......x.......s"
-			"s......x.......s"
-			"s......x.......s"
-			"s......x.......s"
-			"s......x.......s"
+			"s.........x....s"
+			"s.........x....s"
+			"s.........x....s"
+			"s..............s"
+			"s..............s"
 			"s......x.......s"
 			"s..............s"
 			"s..............s"
@@ -4745,7 +4576,7 @@ main(int argc, char* argv[])
 			"sxxxxxxxxxxxxxxs"
 			"ssssssssssssssss";
 
-
+		/*
 		
 		//NOTE(ian): keep/iterate - this is pretty cool
 		
@@ -4769,47 +4600,6 @@ main(int argc, char* argv[])
 
 
 
-		/*
-		//NOTE(ian): keep/iterate - should i have this
-
-		const char* Level =
-			"ssssssssssssssss"
-			"sx.............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"sx.x.x.x.x.x.x.s"
-			"s.x.x.x.x.x.x.xs"
-			"sx.x.x.x.x.x.x.s"
-			"s.x.x.x.x.x.x.xs"
-			"s..............s"
-			"s..b.b.b.......s"
-			"s.b.b.b........s"
-			"s..b.b.b...p...s"
-			"sxxxxxxxxxxxxxxs"
-			"ssssssssssssssss";
-		
-
-
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s.....xxx......s"
-			"sxxxxxxbxxxxxxxs"
-			"sp.b...........s"
-			"sxxxxxxbxxxxxxxs"
-			"s.....xxx......s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"ssssssssssssssss";
-		*/
 		
 		
 		/*
@@ -4831,7 +4621,7 @@ main(int argc, char* argv[])
 			"s.xbx..bxbx.p..s"
 			"sxxxxxxxxxxxxxxs"
 			"ssssssssssssssss";
-
+		
 		
 		//NOTE(ian): keep/iterate
 		const char* Level =
@@ -4852,7 +4642,7 @@ main(int argc, char* argv[])
 			"sssssssxxxxxxxxs"
 			"ssssssssssssssss";
 
-		
+		/*
 		
 		const char* Level =
 			"ssssssssssssssss"
@@ -4872,25 +4662,6 @@ main(int argc, char* argv[])
 			"sxxxxxxxxsssssss"
 			"ssssssssssssssss";
 		
-
-		//TODO(ian): implement taxicab metric walls
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s.........b.b..s"
-			"s..........b...s"
-			"s.........b.b.ps"
-			"s........xxxxxxs"
-			"sx.............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............fs"
-			"ssssssssssssssss";
 
 
 		/*
@@ -4933,30 +4704,89 @@ main(int argc, char* argv[])
 			"sxxxxxxxxbxxxxxs"
 			"ssssssssssssssss";
 		
-		*/
-		
-				
+
 		/*
-		//NOTE(ian): keep/ iterate - this is pretty cool!
 		const char* Level =
 			"ssssssssssssssss"
-			"s............b.s"
-			"s............x.s"
+			"s.........x....s"
 			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"sx.x.x.x.x.x.x.s"
+			"s..............s"
+			"s.x.x.x.x.x.x.xs"
+			"s..............s"
+			"sx.x.x.x.x.x.x.s"
+			"s......b.......s"
+			"s.xbx.xbx.xbx.xs"
+			"s..p...........s"
+			"ssssssssssssssss";
+
+		/*
+		//TODO(ian): in order for this to work I need to establish that a block pushing the player cancels the move
+		const char* Level =
 			"ssssssssssssssss"
-			"s............b.s"
-			"s............x.s"
 			"s..............s"
-			"s............b.s"
-			"s............x.s"
 			"s..............s"
-			"sx...........p.s"
-			"ssssssssbsss.xxs"
-			"sxxxxxsbbbsxxxxs"
-			"sxxxxxsssssxxxxs"
+			"s........bxxxxxs"
+			"s...........bxxs"
+			"sx............ps"
+			"s...........bxxs"
+			"s.........xxxxxs"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
 			"ssssssssssssssss";
 
 		*/
+		
+		
+		//NOTE(ian): this has a nice idea but i don't know if it is expressed in the best possible way
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..........b...s"
+			"s..........b...s"
+			"sx.........b...s"
+			"s..........b...s"
+			"s..........b...s"
+			"s..........b...s"
+			"s..........b.p.s"
+			"ssssss.sssxxxxxs"
+			"ssssssssssssssss"
+			"ssssssssssssssss"
+			"s.s.s.s.s.s.s.ss"
+			"ssssssssssssssss";
+
+		
+
+		/*
+		//NOTE(ian): keep/ iterate - this isn't so cool anymore
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"sx.............s"
+			"s........b.....s"
+			"s.........b....s"
+			"s........b...p.s"
+			"ss.sssssxxxxxxxs"
+			"ss.sssssxxxxxxxs"
+			"ss.sssssxxxxxxxs"
+			"s..............s"
+			"ssssssssssssssss";
 		
 
 		/*
@@ -4979,28 +4809,6 @@ main(int argc, char* argv[])
 			"ssssssssssssssss";
 
 		/*
-
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s.......x......s"
-			"s..............s"
-			"sxxxxxxx.xxxxxxs"
-			"sbbbbbbb.bbbbbbs"
-			"sxxxxxxx.xxxxxxs"
-			"s........b.....s"
-			"s......b.......s"
-			"s......x.......s"
-			"s....x.b.x.....s"
-			"s............p.s"
-			"sxxxxxxbxxxxxxxs"
-			"ssssssssssssssss";
-
-		*/
-
-		/*
 		const char* Level =
 			"ssssssssssssssss"
 			"s..............s"
@@ -5010,9 +4818,9 @@ main(int argc, char* argv[])
 			"s........x.....s"
 			"s..............s"
 			"s..............s"
-			"s...s..s..s....s"
 			"s..............s"
 			"s..............s"
+			"s...x.....x....s"
 			"s..bx..x..xb...s"
 			"s..............s"
 			"s............p.s"
@@ -5020,23 +4828,6 @@ main(int argc, char* argv[])
 			"ssssssssssssssss";
 
 		/*
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s....b..b......s"
-			"s....x..x......s"
-			"s..............s"
-			"s............p.s"
-			"sxxxxxxxbxxxxxxs"
-			"sxxx....bxxxxxxs"
-			"sxxx...b.xxxxxxs"
-			"sxxx...b.xxxxxxs"
-			"sxxx..b..xxxxxxs"
-			"sxxx..b..xxxxxxs"
-			"ssssssssssssssss";
 		
 
 
@@ -5060,62 +4851,18 @@ main(int argc, char* argv[])
 			"s.s.s...bb..s.ss"
 			"ss.s.s.s...s.s.s"
 			"ssssssssssssssss";
-
-		/*
-
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"ss.s.s.....s.s.s"
-			"s.s.s..b..s.s.ss"
-			"ss.s.s..bs.s.s.s"
-			"s.s.s....bs.s.ss"
-			"ss.s.s...s.s.s.s"
-			"s.s.s.....s.s.ss"
-			"ss.s.s..bs.sbs.s"
-			"s.s.s..bs.sbspss"
-			"ss.s..b.bs.sbs.s"
-			"s.s.s..p.bs.sbss"
-			"ss.s.s.b.sbs.s.s"
-			"s.s.s..b.bs.s.ss"
-			"ss.s.s.sbs.s.s.s"
-			"ssssssssssssssss";
-
-
 		/*
 		const char* Level =
 			"ssssssssssssssss"
-			"sx.............s"
-			"s.....s........s"
+			"s.........sss..s"
+			"sxxxxxxx......xs"
+			"sxxxxxx..xb....s"
+			"sssssx....ss...s"
 			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s.....s.s.s.s..s"
-			"s....sbsbsbsbs.s"
-			"s.....s.s.s.s..s"
-			"s......p.......s"
+			"s....xssssssssss"
+			"s.b.xxxxxxxxxxxs"
+			"sp.xxxxxxxxxxxxs"
 			"sxxxxxxxxxxxxxxs"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"sx.............s"
-			"ssssssssssssssss";
-		
-		*/
-		
-		/*
-		//NOTE(ian): reprise!!
-		const char* Level =
-			"ssssssssssssssss"
-			"s............xxs"
-			"s.....x.xb.....s"
-			"s.....s.sss....s"
-			"s.......s......s"
-			"s.......s......s"
-			"s.p..b..x......s"
-			"sxxxxxx.x......s"
-			"s.....xxx......s"
-			"s..............s"
 			"s..............s"
 			"s..............s"
 			"s..............s"
@@ -5142,29 +4889,9 @@ main(int argc, char* argv[])
 			"s..............s"
 			"s..............s"
 			"ssssssssssssssss";
-
-
+		
 		/*
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s.........bb...s"
-			"s.........bbb..s"
-			"s.p.......bbb..s"
-			"sxxxxxx..xxxxxxs"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"ssssssssssssssss";
-		*/	
-
-		/*
+		
 		//TODO(ian): this is pretty cool :)
 		const char* Level =
 			"ssssssssssssssss"
@@ -5185,29 +4912,68 @@ main(int argc, char* argv[])
 			"ssssssssssssssss";
 		
 		
+		*/
+		/*
+		//TODO(ian): this is much better! Keep/iterate
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.......b.bp...s"
+			"s.......xxxxxxxs"
+			"s.....s........s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"sxxxx..........s"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
 
+		/*
 		//TODO(ian): this is much better! Keep/iterate
 		const char* Level =
 			"ssssssssssssssss"
 			"ssssssssssssssss"
-			"sxxxxx.....b...s"
-			"sxxxbx.....x...s"
-			"sxxbbx.....b...s"
-			"sxxxxb.....x...s"
 			"s..............s"
+			"s..............s"
+			"s.....s.b.bp...s"
+			"s.......xxxxxxxs"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"sxxxx..........s"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
+		/*
+		//TODO(ian): this is much better! Keep/iterate
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..........b...s"
+			"s..........xb..s"
 			"s..........p...s"
 			"s.......xxxxxxxs"
-			"s.......bbs....s"
-			"s.......ssb....s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
 			"s..............s"
 			"sxxxx..........s"
 			"s..............s"
 			"s..............s"
 			"ssssssssssssssss";
 		
-		*/
 		
-		//TODO(ian): pushing a chebyshev block ontop of a metricless block deletes the metricless block!!!!
+		/*
 		//TODO(ian): need to find out whether the diagonal control scheme is simple enough to be found out by accident!!
 		//NOTE(ian): this is pretty good. Keep/iterate upon this concept!!!
 		const char* Level =
@@ -5216,7 +4982,7 @@ main(int argc, char* argv[])
 			"s..............s"
 			"s..............s"
 			"sp....b.b......s"
-			"sxxxxxxxxs.....s"
+			"sxxxxxxxs......s"
 			"s..............s"
 			"s..............s"
 			"s..............s"
@@ -5230,24 +4996,6 @@ main(int argc, char* argv[])
 		
 
 		/*
-		//NOTE(ian): this is a good reprise :)
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s.......b......s"
-			"sp.....b.b.s...s"
-			"sx....b...b....s"
-			"s......b.b.....s"
-			"s.......b......s"
-			"s..............s"
-			"s..............s"
-			"s...........xxxs"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"ssssssssssssssss";
 
 		
 

@@ -143,6 +143,12 @@ Cube(r32 A)
 	return Result;
 }
 
+inline s32
+Cube(s32 A)
+{
+	s32 Result = A * A * A;
+	return Result;
+}
 
 inline r32
 Floor(r32 A)
@@ -1224,6 +1230,37 @@ Hadamard(v4 A, v4 B)
 	return Result;
 }
 
+inline v4
+HadamardDiv(v4 A, v4 B)
+{
+	v4 Result;
+	Result.X = A.X / B.X;
+	Result.Y = A.Y / B.Y;
+	Result.Z = A.Z / B.Z;
+	Result.W = A.W / B.W;
+	return Result;
+}
+
+inline u32
+ConvertFromNormalizedVectorToColor(v4 A)
+{
+	u32 Result = ((u32)(A.A*255.0f) << 24) ||
+				((u32)(A.R*255.0f) << 16) ||
+				((u32)(A.G*255.0f) << 8) ||
+				((u32)(A.B*255.0f) << 0);
+	return Result;
+}
+
+inline v4
+ConvertFromColorToNormalizedVector(u32 Color)
+{
+	v4 Result;
+	Result.A = (r32)((Color >> 24) & 255) / 255.0f;
+	Result.R = (r32)((Color >> 16) & 255) / 255.0f;
+	Result.G = (r32)((Color >> 8) & 255) / 255.0f;
+	Result.B = (r32)((Color >> 0) & 255) / 255.0f;
+	return Result;
+}
 
 /*
 ===================
@@ -1498,16 +1535,227 @@ Clamp(s64 Min, s64 A, s64 Max)
 	return Result;
 }
 
-inline b32
-WithinRenderRect(render_dim *Rect, s32 X, s32 Y)
+
+//NOTE(ian): 2D Box
+
+typedef struct {
+	union {
+		struct {
+			i2 P;
+			i2 Size;
+		};
+		struct {
+			s32 X;
+			s32 Y;
+			s32 W;
+			s32 H;
+		};
+	};
+}b2;
+
+
+inline b2
+B2(i2 Pos, i2 Size)
 {
-	b32 Result = (X >= Rect->X && X < Rect->X + Rect->W) &&
-		(Y >= Rect->Y && Y < Rect->Y + Rect->H);
+	b2 Result = b2{ Pos,Size };
+	return Result;
+}
+
+inline b2
+B2(s32 X, s32 Y, s32 W, s32 H)
+{
+	b2 Result = b2{ X,Y,W,H };
+	return Result;
+}
+
+inline i2
+Clamp(b2 Box, i2 Point)
+{
+	i2 Result;
+	Result.X = Clamp(Box.P.X, Point.X, Box.P.X + Box.Size.X);
+	Result.Y = Clamp(Box.P.Y, Point.Y, Box.P.Y + Box.Size.Y);
 	return Result;
 }
 
 
-//NOTE(ian): 2D Axis-aligned Boudning Box
+
+inline b32
+InsideRect(b2 Box, i2 A)
+{
+	b32 Result = (A.X >= Box.P.X && A.X < Box.P.X + Box.Size.X) &&
+		(A.Y >= Box.P.Y && A.Y < Box.P.Y + Box.Size.Y);
+	return Result;
+}
+
+inline s32
+GetArea(b2 Box)
+{
+	s32 Result = Box.Size.X * Box.Size.Y;
+	return Result;
+}
+
+inline i2
+BoxCenter(b2 Box)
+{
+	i2 Result = Box.P + (Box.Size/2);
+	return Result;
+}
+
+inline b2
+CenterDim(i2 Center, i2 Size)
+{
+	b2 Result;
+	Result.P = Center - (Size/2);
+	Result.Size = Size;
+
+	return Result;
+}
+
+inline b2
+TwoPoints(i2 P0, i2 P1)
+{
+	b2 Result;
+	if (P0.X < P1.X)
+	{
+		Result.X = P0.X;
+		Result.W = P1.X - P0.X;
+	}
+	else
+	{
+		Result.X = P1.X;
+		Result.W = P0.X - P1.X;
+	}
+	if (P0.Y < P1.Y)
+	{
+		Result.Y = P0.Y;
+		Result.H = P1.Y - P0.Y;
+	}
+	else
+	{
+		Result.Y = P1.Y;
+		Result.H = P0.Y - P1.Y;
+	}
+	return Result;
+}
+
+
+
+
+
+
+
+inline b2
+ExpandBox(b2 Box, i2 Point)
+{
+	b2 Result = Box;
+
+	if (Point.X < Box.P.X)
+	{
+		Result.W += Box.X - Point.X;
+		Result.X = Point.X;
+	}
+	else if (Point.X > Box.P.X + Box.Size.X)
+	{
+		Result.W = Point.X - Box.X;
+	}
+	if (Point.Y < Box.P.Y)
+	{
+		Result.H += Box.Y - Point.Y;
+		Result.Y = Point.Y;
+	}
+	else if (Point.Y > Box.P.Y + Box.Size.Y)
+	{
+		Result.H = Point.Y - Box.Y;
+	}
+
+	return Result;
+}
+
+inline b2 
+MultiplePoints(i2* Points, u32 Num)
+{
+	b2 Result = TwoPoints(Points[0], Points[1]);
+
+	for (u32 i = 2;
+		i < Num;
+		++i)
+	{
+		Result = ExpandBox(Result, Points[i]);
+	}
+
+	return Result;
+}
+
+
+
+
+inline b2
+CombineRect(b2 BoxA, b2 BoxB)
+{
+	b2 Result = ExpandBox(BoxA, BoxB.P);
+	Result = ExpandBox(Result, BoxB.P + BoxB.Size);
+	return Result;
+
+}
+
+
+
+inline b32
+Intersects(b2 A, b2 B)
+{
+	b32 Result = !(((A.P.X >= B.P.X + B.Size.X) ||
+		(A.P.X + A.Size.X <= B.P.X)) ||
+		((A.P.Y >= B.P.Y + B.Size.Y) ||
+		(A.P.Y + A.Size.Y <= B.P.Y)));
+	return Result;
+}
+
+inline b2
+GetIntersection(b2 A, b2 B)
+{
+	b2 Result;
+
+	Result.P.X = A.P.X > B.P.X ? A.P.X : B.P.X;
+	Result.P.Y = A.P.Y > B.P.Y ? A.P.Y : B.P.Y;
+	Result.Size.X = (A.Size.X + A.P.X < B.Size.X + B.P.X ?
+		A.Size.X + (A.P.X - Result.P.X) : B.Size.X + (B.P.X - Result.P.X));
+	Result.Size.Y = (A.Size.Y + A.P.Y < B.Size.Y + B.P.Y ?
+		A.Size.Y + (A.P.Y - Result.P.Y) : B.Size.Y + (B.P.Y - Result.P.Y));
+
+	return Result;
+}
+
+inline b2
+ClipRect(b2 A, b2 B)
+{
+	if (Intersects(A, B))
+	{
+		return GetIntersection(A, B);
+	}
+	else
+	{
+		return b2{ 0,0,0,0 };
+	}
+}
+
+
+inline void
+GetCorners(b2 Box, i2 *Corners)
+{
+	Corners[0] = Box.P;
+	Corners[1] = Box.P + i2{ Box.W,0 };
+	Corners[2] = Box.P + i2{ 0,Box.H };
+	Corners[3] = Box.P + Box.Size;
+}
+
+inline i2
+Barycentric(b2 Box, i2 Point)
+{
+	i2 Result;
+	Result.X = (Point.X - Box.X) / Box.W;
+	Result.Y = (Point.Y - Box.Y) / Box.H;
+	return Result;
+}
 
 typedef struct {
 	union {
@@ -1524,6 +1772,27 @@ typedef struct {
 	};
 }r2;
 
+inline b2
+B2(r2 Rect)
+{
+	b2 Result;
+	Result.X = (s32)Rect.X;
+	Result.Y = (s32)Rect.Y;
+	Result.W = (s32)Rect.W;
+	Result.H = (s32)Rect.H;
+	return Result;
+}
+
+inline r2
+R2(b2 Rect)
+{
+	r2 Result;
+	Result.X = (r32)Rect.X;
+	Result.Y = (r32)Rect.Y;
+	Result.W = (r32)Rect.W;
+	Result.H = (r32)Rect.H;
+	return Result;
+}
 
 inline r2
 R2(v2 Pos, v2 Size)
@@ -1553,8 +1822,8 @@ Clamp(r2 Rect, v2 Point)
 inline b32
 InsideRect(r2 Rect, v2 A)
 {
-	b32 Result = (A.X >= Rect.P.X && A.X <= Rect.P.X + Rect.Size.X) &&
-		(A.Y >= Rect.P.Y && A.Y <= Rect.P.Y + Rect.Size.Y);
+	b32 Result = (A.X >= Rect.P.X && A.X < Rect.P.X + Rect.Size.X) &&
+		(A.Y >= Rect.P.Y && A.Y < Rect.P.Y + Rect.Size.Y);
 	return Result;
 }
 
@@ -1663,7 +1932,7 @@ ExpandRect(r2 Rect, v2 Point)
 	return Result;
 }
 
-inline r2 
+inline r2
 MultiplePoints(v2* Points, u32 Num)
 {
 	r2 Result = TwoPoints(Points[0], Points[1]);
@@ -1749,6 +2018,26 @@ Barycentric(r2 Rect, v2 Point)
 	return Result;
 }
 
+inline r2
+RelativeBaryCentricRect(r2 Reference, r2 Referent)
+{
+	r2 Result;
+	Result.P = Referent.P - Reference.P;
+	Result.Size = HadamardDiv(Referent.Size, Reference.Size);
+	Result.P = Hadamard(Result.P, Result.Size);
+	return Result;
+}
+
+inline r2 
+RelativeRectTransformation(r2 Reference, r2 Referent, r2 OtherRect)
+{
+	r2 RelativeRect = RelativeBaryCentricRect(Reference, Referent);
+	OtherRect.P = OtherRect.P + Hadamard(RelativeRect.P, OtherRect.Size);
+	OtherRect.Size = Hadamard(RelativeRect.Size, OtherRect.Size);
+	return OtherRect;
+
+}
+
 
 
 
@@ -1793,6 +2082,35 @@ GetLinePlaneIntersection(v3 P, v3 V, r32 H)
 	return Result;
 }
 
+inline s32
+Lerp(s32 A, s32 Numerator, s32 Denominator, s32 B)
+{
+	s32 Result = A + (Numerator * (B - A)) / Denominator;
+	return Result;
+}
+
+inline i2
+Lerp(i2 A, s32 Numerator, s32 Denominator, i2 B)
+{
+	i2 Result = A + (Numerator * (B - A)) / Denominator;
+	return Result;
+}
+
+inline s32
+Berp(s32 A, s32 B, s32 Numerator, s32 Denominator, s32 C, s32 D)
+{
+	s32 Result = A + (Cube(Numerator)*(D-3*C+3*B-A)+Square(Numerator)*Denominator*(3*A-6*B+3*C)
+		+ Numerator*Square(Denominator)*(3*A+3*B))/Cube(Denominator);
+	return Result;
+}
+
+inline i2
+Berp(i2 A, i2 B, s32 Numerator, s32 Denominator, i2 C, i2 D)
+{
+	i2 Result = A + (Cube(Numerator)*(D - 3 * C + 3 * B - A) + Square(Numerator)*Denominator*(3 * A - 6 * B + 3 * C)
+		+ Numerator * Square(Denominator)*(3 * A + 3 * B)) / Cube(Denominator);
+	return Result;
+}
 
 inline r32
 Lerp(r32 A, r32 t, r32 B)
@@ -2191,6 +2509,38 @@ typedef struct {
 	u32 Height;
 }texture;
 
+/*
+internal void
+DrawRect(texture Output, texture Input, r2 Screen, r2 Rect, r2 DrawRegion)
+{
+	if (Intersects(Screen, Rect))
+	{
+		r2 Clip = GetIntersection(Screen, Rect);
+		r2 Relative = RelativeRectTransformation(Rect, Clip,DrawRegion);
+		r2 Increment = 
+
+		for (s32 Y = Clip.Y;
+			Y < Clip.Y+Clip.H;
+			++Y)
+		{
+			for (s32 X = Clip.X;
+				X < Clip.X+Clip.W;
+				++X)
+			{
+				u32 ColorValue;
+				Output.Texels[Y * Output.Width + X] = Input.Texels[InputY*Input.Width + InputX];
+			}
+
+			Pos.Y += Increment.Y;
+			Pos.X = (r32)InputMinX;
+		}
+	}
+}
+*/
+
+
+
+
 internal void
 DrawRect(texture Output, r2 Screen, r2 Rect, v4 Color)
 {
@@ -2367,15 +2717,17 @@ enum collision_layer {
 };
 
 enum block_type {
-	EMPTY,
-	PLAYER,
-	CREATURE,
-	CHEBYSHEV_WALL,
-	TAXICAB_WALL,
-	METRICLESS_WALL,
-	CHEBYSHEV_CRATE,
-	TAXICAB_CRATE,
-	METRICLESS_CRATE
+	EMPTY = 0,
+	PLAYER = 1,
+	CREATURE = 2,
+	CHEBYSHEV_WALL = 3,
+	TAXICAB_WALL = 4,
+	METRICLESS_WALL = 5,
+	CHEBYSHEV_CRATE = 6,
+	TAXICAB_CRATE = 7,
+	METRICLESS_CRATE = 8,
+	L_MOVER = 9,
+	J_MOVER = 10
 };
 
 enum block_attributes {
@@ -3535,36 +3887,6 @@ internal void
 GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 	u8 *SoundData, s32 BytesToWrite, u16 Samples)
 {
-	u64* TwoPixels = (u64*)Window->Texels;
-
-	//NOTE(ian): Change these paramters to change the background
-	u32 Bit = 3, Fit = 5;
-	for (u32 Y = 0;
-		Y < Window->Height / 2;
-		++Y)
-	{
-		for (u32 X = 0;
-			X < Window->Width;
-			++X)
-		{
-			if ((((X + Y) / Fit) & ++Bit) == Bit--)
-			{
-				TwoPixels[Y * Window->Width + X] = 0;
-			}
-			else
-			{
-				TwoPixels[Y * Window->Width + X] = 0x00ffffff;
-			}
-		}
-	}
-
-	//block Blocks[30];
-	//u32 NumIndices = 0;
-	//u32 Indices[30]; 
-	//CatalogConnectedBlocks(GameState, Blocks, Indices, &NumIndices, 6, 2);
-	//5int r = 9;
-
-
 
 	i2 Move = { 0 };
 	r32 AgainTime = 0.2f;
@@ -3834,6 +4156,27 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 
 
 
+	v2 PlayerCenter = V2((s32)GameState->PlayerIndex%LEVELWIDTH, LEVELHEIGHT - 1 - (s32)GameState->PlayerIndex / LEVELHEIGHT) + V2(0.5f,0.5f);
+	GameState->Screen.P = (0.9f*GameState->Screen.P) + (0.1f*(PlayerCenter-(0.5f*GameState->Screen.Size)));
+
+
+	i2 BackgroundPos = I2(Hadamard(GameState->Screen.P, v2{ 16.0F,16.0F }));
+
+
+	for (s32 Y = 0;
+		Y < Window->Height;
+		++Y)
+	{
+		for (s32 X = 0;
+			X < Window->Width;
+			++X)
+		{
+			s32 Value = ((Y+BackgroundPos.Y)*Window->Width+X+BackgroundPos.X) & 0x000000ff;
+			s32 Color = (Value << 16) | (Value << 8) | (Value << 0);
+			Window->Texels[Y*Window->Width + X] = (u32)Color;
+		}
+	}
+	
 
 
 	for (s32 Y = LEVELHEIGHT-1;
@@ -4133,6 +4476,7 @@ main(int argc, char* argv[])
 	
 	{
 		GameState.Screen = R2(v2{ 0.0f,0.0f }, v2{ (r32)LEVELWIDTH,(r32)LEVELHEIGHT });
+		GameState.Screen.Size = GameState.Screen.Size * 2.0f;  
 		GameState.AgainTime = 0.0f;
 		Seed(&GameState.PRNG, 100);
 
@@ -4272,10 +4616,623 @@ main(int argc, char* argv[])
 
 
 		//NOTE(ian): high concept pitch: a cross between catherine and snakebird
-
+		//16bit
+		//TODO(ian): should I use a char code:
+		//0 - static
+		//1 - right
+		//2 - up right
+		//3 - up
+		//4 - up left
+		//5 - left
+		//6 - down left
+		//7 - down
+		//8 - down right
+		//p - player * 9
+		//l - LMover * 9
+		//j - JMover * 9
+		//b - chebyshev block * 9
+		//d - metricless block * 9
+		
 
 		//TODO(ian): make level editor!!! support a big world!!!!
 		//Number of puzzles so far: ~20
+
+		//NOTE(ian): Beginning levels ~9 levels
+
+
+		/*
+		const char* Level =
+			"ssssssssssssssss"
+			"s...x..........s"
+			"s......x......xs"
+			"s..............s"
+			"s..x......x....s"
+			"s..............s"
+			"s..............s"
+			"s.........x....s"
+			"s..............s"
+			"s......x......xs"
+			"s..............s"
+			"s...x.....x....s"
+			"s..............s"
+			"sp.............s"
+			"sxxxxxxxxxxxxxxx"
+			"ssssssssssssssss";
+
+		/*
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"sxxxx..........s"
+			"s...x..........s"
+			"s.......x......s"
+			"s..............s"
+			"s..............s"
+			"sp...b.........s"
+			"sxxxxxxxx......s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
+
+		/*
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s........xxxxxxs"
+			"s........x.....s"
+			"sp.......x.....s"
+			"sxxxxxxxxx.....s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
+
+		/*
+
+
+		//NOTE(ian): much better
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s.....xx.......s"
+			"s.....x........s"
+			"s.....s......xxs"
+			"s.....s........s"
+			"s.....s........s"
+			"s.....x........s"
+			"s.....xx.......s"
+			"s...b.xb.......s"
+			"sxxx..xxx......s"
+			"s..xb.x........s"
+			"sp......x......s"
+			"sxxxxxxxx......s"
+			"ssssssssssssssss";
+
+		/*
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s........x.....s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s...x.....x....s"
+			"s..bx..x..xb...s"
+			"s..............s"
+			"s............p.s"
+			"sxxxxxxbxxxxxxxs"
+			"ssssssssssssssss";
+
+		//TODO(ian): this level can be beaten by moving diagonally; can players discover this on their own or is it too obfuscated?
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.x..b.........s"
+			"s.xxxxx....xxxxs"
+			"s.xx...........s"
+			"s.x............s"
+			"s.x............s"
+			"s.p.b..........s"
+			"sxxxxxxs.......s"
+			"s..............s"
+			"ssssssssssssssss";
+
+		/*
+		//TODO(ian): this is much better! Keep/iterate
+		const char* Level =
+			"ssssssssssssssss"
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s.....s.b.bp...s"
+			"s.......xxxxxxxs"
+			"s.......xxxxxxxs"
+			"s.........xxxxxs"
+			"s..........xxxxs"
+			"s...........xxxs"
+			"s............xxs"
+			"s.............xs"
+			"sxxxx..........s"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
+		
+		/*
+		//TODO(ian): this is much better! Keep/iterate
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..........b...s"
+			"s..........xb..s"
+			"s..........p...s"
+			"s.......xxxxxxxs"
+			"s.......xxxxxxxs"
+			"s.........xxxxxs"
+			"s.........xxxxxs"
+			"s...........xxxs"
+			"s...........xxxs"
+			"s..............s"
+			"sxxxx..........s"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
+
+		*/
+		/*
+		//TODO(ian): need to find out whether the diagonal control scheme is simple enough to be found out by accident!!
+		//NOTE(ian): this is pretty good. Keep/iterate upon this concept!!!
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"sp..b.b.b......s"
+			"sxxxxxxxx......s"
+			"sxxxxxxxb......s"
+			"sxxxxxbbx......s"
+			"sxxxxxxxx......s"
+			"sxxxxx.........s"
+			"sxxxx..........s"
+			"sxxx...........s"
+			"sxx............s"
+			"sx.............s"
+			"s..............s"
+			"s..........xxxxs"
+			"ssssssssssssssss";
+
+
+		//NOTE(ian): Diagonal Levels ~9 levels
+
+
+		/*
+		const char* Level =
+			"ssssssssssssssss"
+			"s.........sss..s"
+			"sxxxxxxx......xs"
+			"sxxxxxx..xb....s"
+			"sssssx....ss...s"
+			"s..............s"
+			"s....xssssssssss"
+			"s.b.xxxxxxxxxxxs"
+			"sp.xxxxxxxxxxxxs"
+			"sxxxxxxxxxxxxxxs"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
+
+		*//*
+		//TODO(ian): this is bad?
+		const char* Level =
+			"ssssssssssssssss"
+			"s.......x......s"
+			"s.............xs"
+			"s....s.......x.s"
+			"s...sbs.....x..s"
+			"s....s.....x...s"
+			"s...sbs...x....s"
+			"s....s...x.....s"
+			"s...sbs.x......s"
+			"s....s.x.......s"
+			"s.....x........s"
+			"sxxxxx.........s"
+			"s.b.b.b........s"
+			"sp.............s"
+			"s..............s"
+			"ssssssssssssssss";
+		
+		/*
+
+
+
+		//NOTE(ian): this is a good reprise :)
+		const char* Level =
+		"ssssssssssssssss"
+		"s..............s"
+		"s..............s"
+		"s..............s"
+		"sp..b.b...s....s"
+		"sxxxxxxxs......s"
+		"s..............s"
+		"s..............s"
+		"s..............s"
+		"s.............bs"
+		"s..........xxxxs"
+		"s..............s"
+		"s..............s"
+		"s..............s"
+		"s..............s"
+		"ssssssssssssssss";
+
+		*/
+
+
+		/*
+		const char* Level =
+			"ssssssssssssssss"
+			"s.........x....s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"sx.x.x.x.x.x.x.s"
+			"s..............s"
+			"s.x.x.x.x.x.x.xs"
+			"s..............s"
+			"sx.x.x.x.x.x.x.s"
+			"s......b.......s"
+			"s.xbx.xbx.xbx.xs"
+			"s..p...........s"
+			"ssssssssssssssss";
+
+
+		//NOTE(ian): keep/iterate
+		const char* Level =
+			"ssssssssssssssss"
+			"s......s.......s"
+			"s......s.......s"
+			"s......s.......s"
+			"s......s.......s"
+			"s......s.......s"
+			"s......s.......s"
+			"s......s.......s"
+			"s......s.......s"
+			"s....sss.......s"
+			"s..............s"
+			"sxx....x..bxxxbs"
+			"sss....x.......s"
+			"sss....x......ps"
+			"sssssssxxxxxxxxs"
+			"ssssssssssssssss";
+
+		/*
+
+		//NOTE(ian): keep/iterate - this is pretty cool
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s.xxxxxxxxxxxxxs"
+			"ss.xxxxxxxxxxxxs"
+			"s...xxxxxxxxxxxs"
+			"s....xxxxxxxxxxs"
+			"sxxxx..........s"
+			"sxxxxx.........s"
+			"sxxxxxx........s"
+			"sxxxxxxx.......s"
+			"sxxxxxxxx......s"
+			"s..............s"
+			"sb..........x..s"
+			"s.b........xxx.s"
+			"s..b....p.xxxxxs"
+			"sxxxxxxxxxxxxxxs"
+			"ssssssssssssssss";
+
+		/*
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s...........xxxs"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.xxxxx........s"
+			"s.x............s"
+			"s.xb...bxs.....s"
+			"s.x.b.b.xs.....s"
+			"s.x.....xs.....s"
+			"sxx.....xs.....s"
+			"sp......xs.....s"
+			"sxxxxxxxxsssssss"
+			"ssssssssssssssss";
+
+
+		//NOTE(ian): keep/iterate - this concept should be taught
+		const char* Level =
+			"ssssssssssssssss"
+			"s.........x....s"
+			"s.........x....s"
+			"s.........x....s"
+			"s..............s"
+			"s..............s"
+			"s......x.......s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.........xxx..s"
+			"s.......b......s"
+			"s..p...b.......s"
+			"sxxxxxxxxxxxxxxs"
+			"ssssssssssssssss";
+
+
+		/*
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"sxxxxxsxxxxxxxxs"
+			"s.....x........s"
+			"s....xx........s"
+			"s....xx........s"
+			"s.......b......s"
+			"sp...x..bbb.xx.s"
+			"sxxxxxxxx.xxxxxs"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
+
+
+		/*
+		//NOTE(ian): this is great :)
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..ss.ssss.....s"
+			"sssss..........s"
+			"s..ss..........s"
+			"s..ss...xxx....s"
+			"s.....xxx..xx..s"
+			"s.....xx....xx.s"
+			"s.....x..xx..xxs"
+			"s...b...xxxx..ss"
+			"sxxx..xxxssss..s"
+			"s..xb.x..s..s..s"
+			"sp....x..s..s..s"
+			"sxxxxxx.....s..s"
+			"ssssssssssssssss";
+
+		/*
+
+
+		//NOTE(ian): this one is really good :)
+		const char* Level =
+			"ssssssssssssssss"
+			"s...sxs....s...s"
+			"s...s....sxs...s"
+			"s...sxs....s...s"
+			"s...s....sxs...s"
+			"s...sxs....s...s"
+			"s...s....sxs...s"
+			"s...sxs....s...s"
+			"s...s....sxs...s"
+			"s...sxs....s...s"
+			"s...s....sxs...s"
+			"s...s.bbb..s...s"
+			"s...s.x....s...s"
+			"s...s..p...s...s"
+			"sxxxxxxxxxxxxxxs"
+			"ssssssssssssssss";
+
+
+		//NOTE(ian): Metricless Block levels ~3
+
+		*/
+		//NOTE(ian): much better!
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.x............s"
+			"s..............s"
+			"s..............s"
+			"s.........s....s"
+			"s........x.....s"
+			"s.......x......s"
+			"sxxxxxxx.......s"
+			"s.b.b.b........s"
+			"sp.............s"
+			"s..............s"
+			"ssssssssssssssss";
+
+		/*
+		//NOTE(ian): this is pretty good I think; test it to see whether people like it
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.........d....s"
+			"s.........d....s"
+			"s.........d....s"
+			"s.........d....s"
+			"s.........d.p..s"
+			"sbssssdsdsdsbxxs"
+			"sxsssss.s.s.sbbs"
+			"ssssssssssssssss";
+
+		/*
+		//NOTE(ian): beginning of metricless block exploration
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.b............s"
+			"sxxxxx.........s"
+			"sx.............s"
+			"sx.............s"
+			"sx.............s"
+			"sx.............s"
+			"sx.............s"
+			"sp.............s"
+			"sxxssssssssssxxs"
+			"ssssssssssssssss";
+
+		/*
+		//NOTE(ian): is this actually good?
+		const char* Level =
+			"ssssssssssssssss"
+			"s......x.......s"
+			"s......x.......s"
+			"s......x.......s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s....x.........s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.....s........s"
+			"s.......b.b.b..s"
+			"sp......x.x.x..s"
+			"sxxxxxxxxxxxxxxs"
+			"ssssssssssssssss";
+
+
+		*/
+
+
+
+		//NOTE(ian): Flying levels ~4
+
+		/*
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"sbxx......bxxxxs"
+			"sbx..........bxs"
+			"sxb...........ps"
+			"sx...........bxs"
+			"sx.........xxxxs"
+			"sx.............s"
+			"sxxxxx.........s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
+
+		/*
+		//NOTE(ian): this is a neat idea and it's much better! :)
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.........b....s"
+			"sssss....bd.x..s"
+			"s.........b....s"
+			"s..............s"
+			"s............x.s"
+			"s..............s"
+			"s............b.s"
+			"sssss........x.s"
+			"s............b.s"
+			"s...........p..s"
+			"s...........xxxs"
+			"ssssssssssssssss";
+
+
+		/*
+		//NOTE(ian): this is really good! Keep/iterate
+
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"ss.s.........s.s"
+			"s.s...........ss"
+			"ss.s.........s.s"
+			"s.s...........ss"
+			"ss.s.........s.s"
+			"s.s...........ss"
+			"ss.s.........s.s"
+			"s.s....,....s.ss"
+			"ss.s..bbb...bs.s"
+			"s.s.s..p.b..sbss"
+			"ss.s.s.b..b..s.s"
+			"s.s.s...bb..s.ss"
+			"ss.s.s.s...s.s.s"
+			"ssssssssssssssss";
+
+
+		/*
+		//NOTE(ian): this is neat but is this the best way to present it?
+		const char* Level =
+			"ssssssssssssssss"
+			"s.......s......s"
+			"s.......sss....s"
+			"s.........s....s"
+			"s.........sss..s"
+			"s...........s..s"
+			"s...........ssss"
+			"s..............s"
+			"sss............s"
+			"s.s.......bx...s"
+			"s.sss..........s"
+			"s...s.......b..s"
+			"s...sss....b...s"
+			"s.....s.....b.ps"
+			"sssssssssxxxxxxs"
+			"ssssssssssssssss";
+
+		*/
+		
+
+		//NOTE(ian): Garbage/Misc
 
 		/*
 		const char* Level =
@@ -4322,7 +5279,7 @@ main(int argc, char* argv[])
 			"sxxxxxxxxxxxxxxs"
 			"ssssssssssssssss";
 
-
+		*/
 		/*
 		const char* Level =
 			"ssssssssssssssss"
@@ -4332,9 +5289,9 @@ main(int argc, char* argv[])
 			"s..............s"
 			"s..............s"
 			"s..............s"
-			"s.....sxxxxxxxxs"
-			"s..s...........s"
-			"s.....sxxxxxxxxs"
+			"s.....xxxxxxxxxs"
+			"s..x...........s"
+			"s.....xxxxxxxxxs"
 			"s..............s"
 			"s..xbb.........s"
 			"s..............s"
@@ -4342,10 +5299,13 @@ main(int argc, char* argv[])
 			"sxxxxxxxxxxxxxxx"
 			"ssssssssssssssss";
 
+		
+
 		*/
+		
 
+		
 		/*
-
 		const char* Level =
 			"ssssssssssssssss"
 			"s..............s"
@@ -4356,137 +5316,18 @@ main(int argc, char* argv[])
 			"s..............s"
 			"s..............s"
 			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s.b............s"
 			"s..b...........s"
-			"sp..b..s.....xxs"
-			"sxxxxxxxxbxxxbxs"
-			"ssssssssssssssss";
-
-		/*
-		const char* Level =
-			"ssssssssssssssss"
-			"s...x..........s"
-			"s......x......xs"
+			"s..x...........s"
+			"s..b...........s"
 			"s..............s"
-			"s..x......x....s"
-			"s..............s"
-			"s..............s"
-			"s.........x....s"
-			"s..............s"
-			"s......x......xs"
-			"s..............s"
-			"s...x.....x....s"
-			"s..............s"
-			"sp.............s"
-			"sxxxxxxxxxxxxxxx"
-			"ssssssssssssssss";
-
-		/*
-
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"sxxxxxsxxxxxxxxs"
-			"s.....x........s"
-			"s....xx........s"
-			"s....xx........s"
-			"s.......b......s"
-			"sp...x..bbb.xx.s"
-			"sxxxxxxxx.xxxxxs"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"ssssssssssssssss";
-
-		/*
-
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s........xxxxxxs"
-			"s........x.....s"
-			"sp.......x.....s"
-			"sxxxxxxxxx.....s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
+			"sp...........s.s"
+			"sxxs.bbbbbbbbsxs"
 			"ssssssssssssssss";
 
 
-		/*
-
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"sxxxx..........s"
-			"s...x..........s"
-			"s.......x......s"
-			"s..............s"
-			"s..............s"
-			"sp...b.........s"
-			"sxxxxxxxx......s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"ssssssssssssssss";
-		*/
-		
-		/*
-		//NOTE(ian): this is great :)
-
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..ss.ssss.....s"
-			"sssss..........s"
-			"s..ss..........s"
-			"s..ss...xxx....s"
-			"s.....xxx..xx..s"
-			"s.....xx....xx.s"
-			"s.....x..xx..xxs"
-			"s...b...xxxx..ss"
-			"sxxx..xxxssss..s"
-			"s..xb.x..s..s..s"
-			"sp....x..s..s..s"
-			"sxxxxxx.....s..s"
-			"ssssssssssssssss";
-		
-		/*
 		
 		
-		//NOTE(ian): much better
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s.....xx.......s"
-			"s.....x........s"
-			"s.....s......xxs"
-			"s.....s........s"
-			"s.....s........s"
-			"s.....x........s"
-			"s.....xx.......s"
-			"s...b.xb.......s"
-			"sxxx..xxx......s"
-			"s..xb.x........s"
-			"sp......x......s"
-			"sxxxxxxxx......s"
-			"ssssssssssssssss";
+		
 
 
 		*/
@@ -4510,98 +5351,36 @@ main(int argc, char* argv[])
 			"ssssssssssssssss";
 
 
+		
+
+
+
+
+
+
+		
+		
+		*/
+
 		/*
 		const char* Level =
 			"ssssssssssssssss"
 			"s..............s"
 			"s..............s"
+			"s...........xxxs"
 			"s..............s"
 			"s..............s"
 			"s..............s"
-			"s.b............s"
-			"sxxx........xxxs"
-			"sx............xs"
-			"sx............xs"
-			"sx............xs"
-			"sx............xs"
-			"sx............xs"
-			"sp............xs"
-			"sxxssssssssssxxs"
+			"s.xxsss........s"
+			"s.x............s"
+			"s.xb...bxs.....s"
+			"s.x.b.b.xs.....s"
+			"s.x.....xs.....s"
+			"sxx.....xs.....s"
+			"sp......xs.....s"
+			"sxxxxxxxxsssssss"
 			"ssssssssssssssss";
 
-
-		/*
-
-
-		//NOTE(ian): this one is really good :)
-		const char* Level =
-			"ssssssssssssssss"
-			"s...sxs....s...s"
-			"s...s....sxs...s"
-			"s...sxs....s...s"
-			"s...s....sxs...s"
-			"s...sxs....s...s"
-			"s...s....sxs...s"
-			"s...sxs....s...s"
-			"s...s....sxs...s"
-			"s...sxs....s...s"
-			"s...s....sxs...s"
-			"s...s.bbb..s...s"
-			"s...s.x....s...s"
-			"s...s..p...s...s"
-			"sxxxxxxxxxxxxxxs"
-			"ssssssssssssssss";
-
-
-		
-
-
-
-		//NOTE(ian): keep/iterate - this concept should be taught
-		const char* Level =
-			"ssssssssssssssss"
-			"s.........x....s"
-			"s.........x....s"
-			"s.........x....s"
-			"s..............s"
-			"s..............s"
-			"s......x.......s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s.........xxx..s"
-			"s.......b......s"
-			"s..p...b.......s"
-			"sxxxxxxxxxxxxxxs"
-			"ssssssssssssssss";
-
-		/*
-		
-		//NOTE(ian): keep/iterate - this is pretty cool
-		
-		const char* Level =
-			"ssssssssssssssss"
-			"s.xxxxxxxxxxxxxs"
-			"ss.xxxxxxxxxxxxs"
-			"s...xxxxxxxxxxxs"
-			"s....xxxxxxxxxxs"
-			"sxxxx..........s"
-			"sxxxxx.........s"
-			"sxxxxxx........s"
-			"sxxxxxxx.......s"
-			"sxxxxxxxx......s"
-			"s..............s"
-			"sb..........x..s"
-			"s.b........xxx.s"
-			"s..b....p.xxxxxs"
-			"sxxxxxxxxxxxxxxs"
-			"ssssssssssssssss";
-
-
-
-		
-		
 		/*
 		
 		const char* Level =
@@ -4621,68 +5400,9 @@ main(int argc, char* argv[])
 			"s.xbx..bxbx.p..s"
 			"sxxxxxxxxxxxxxxs"
 			"ssssssssssssssss";
-		
-		
-		//NOTE(ian): keep/iterate
-		const char* Level =
-			"ssssssssssssssss"
-			"s......s.......s"
-			"s......s.......s"
-			"s......s.......s"
-			"s......s.......s"
-			"s......s.......s"
-			"s......s.......s"
-			"s......s.......s"
-			"s......s.......s"
-			"s....sss.......s"
-			"s..............s"
-			"sxx....x..bxxxbs"
-			"sss....x.......s"
-			"sss....x......ps"
-			"sssssssxxxxxxxxs"
-			"ssssssssssssssss";
-
-		/*
-		
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s...........xxxs"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s.xxxxx........s"
-			"s.x............s"
-			"s.xb...bxs.....s"
-			"s.x.b.b.xs.....s"
-			"s.x.....xs.....s"
-			"sxx.....xs.....s"
-			"sp......xs.....s"
-			"sxxxxxxxxsssssss"
-			"ssssssssssssssss";
-		
 
 
-		/*
-		//TODO(ian): maybe combine this one with the stairs one?
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s......x.......s"
-			"s..............s"
-			"s..........s...s"
-			"s.....xx..s....s"
-			"s...xxx..xx....s"
-			"s.xxx.b.xxx....s"
-			"sxx..b....x....s"
-			"s...b.....x....s"
-			"s....x..xxx....s"
-			"s.p.xxxxxx.....s"
-			"sxxxxxxxxxxxxxxs"
-			"ssssssssssssssss";
+		
 
 		/*
 
@@ -4693,206 +5413,77 @@ main(int argc, char* argv[])
 			"s..............s"
 			"s..............s"
 			"s..............s"
+			"s.....x.x.x....s"
+			"s.....x..bx....s"
+			"s.....xxxxx....s"
+			"s.....x...x....s"
+			"s.....xxx.x....s"
 			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s.....b..b..b..s"
-			"s.....xx.x.xx..s"
-			"s............p.s"
+			"s.........x....s"
+			"s.............ps"
 			"sxxxxxxxxbxxxxxs"
 			"ssssssssssssssss";
 		
 
-		/*
-		const char* Level =
-			"ssssssssssssssss"
-			"s.........x....s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"sx.x.x.x.x.x.x.s"
-			"s..............s"
-			"s.x.x.x.x.x.x.xs"
-			"s..............s"
-			"sx.x.x.x.x.x.x.s"
-			"s......b.......s"
-			"s.xbx.xbx.xbx.xs"
-			"s..p...........s"
-			"ssssssssssssssss";
-
-		/*
-		//TODO(ian): in order for this to work I need to establish that a block pushing the player cancels the move
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s........bxxxxxs"
-			"s...........bxxs"
-			"sx............ps"
-			"s...........bxxs"
-			"s.........xxxxxs"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"ssssssssssssssss";
-
-		*/
 		
 		
-		//NOTE(ian): this has a nice idea but i don't know if it is expressed in the best possible way
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..........b...s"
-			"s..........b...s"
-			"sx.........b...s"
-			"s..........b...s"
-			"s..........b...s"
-			"s..........b...s"
-			"s..........b.p.s"
-			"ssssss.sssxxxxxs"
-			"ssssssssssssssss"
-			"ssssssssssssssss"
-			"s.s.s.s.s.s.s.ss"
-			"ssssssssssssssss";
-
 		
 
-		/*
-		//NOTE(ian): keep/ iterate - this isn't so cool anymore
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"sx.............s"
-			"s........b.....s"
-			"s.........b....s"
-			"s........b...p.s"
-			"ss.sssssxxxxxxxs"
-			"ss.sssssxxxxxxxs"
-			"ss.sssssxxxxxxxs"
-			"s..............s"
-			"ssssssssssssssss";
+		
 		
 
 		/*
 		const char* Level =
 			"ssssssssssssssss"
 			"s..............s"
+			"s......bb...b..s"
+			"s.......x....b.s"
+			"s.....bb..bbx..s"
+			"s............b.s"
+			"s.............bs"
+			"s...........p..s"
+			"sxsss......sxxxs"
+			"s...ssssssss...s"
 			"s..............s"
 			"s..............s"
 			"s..............s"
 			"s..............s"
-			"s..x.b.........s"
-			"s.xxxxxx.......s"
-			"s.x.........xxxs"
+			"s..............s"
+			"ssssssssssssssss";
+		
+		
+
+		/*
+
+		//TODO(ian): this level can be beaten by moving diagonally; can players discover this on their own or is it too obfuscated?
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.x..b.........s"
+			"s.xxxxx........s"
+			"s.xx.......xxxxs"
 			"s.x............s"
 			"s.x............s"
-			"s.p..b.........s"
-			"sxxxxxxx.......s"
-			"s..............s"
+			"s.p.b..........s"
+			"sxxxxxx........s"
 			"s..............s"
 			"ssssssssssssssss";
 
-		/*
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s........x.....s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s...x.....x....s"
-			"s..bx..x..xb...s"
-			"s..............s"
-			"s............p.s"
-			"sxxxxxxbxxxxxxxs"
-			"ssssssssssssssss";
+		
 
 		/*
 		
 
 
-		/*
-		//NOTE(ian): this is really good! Keep/iterate
 		
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"ss.s.........s.s"
-			"s.s...........ss"
-			"ss.s.........s.s"
-			"s.s...........ss"
-			"ss.s.........s.s"
-			"s.s...........ss"
-			"ss.s.........s.s"
-			"s.s....,....s.ss"
-			"ss.s..bbb...bs.s"
-			"s.s.s..p.b..sbss"
-			"ss.s.s.b..b..s.s"
-			"s.s.s...bb..s.ss"
-			"ss.s.s.s...s.s.s"
-			"ssssssssssssssss";
-		/*
-		const char* Level =
-			"ssssssssssssssss"
-			"s.........sss..s"
-			"sxxxxxxx......xs"
-			"sxxxxxx..xb....s"
-			"sssssx....ss...s"
-			"s..............s"
-			"s....xssssssssss"
-			"s.b.xxxxxxxxxxxs"
-			"sp.xxxxxxxxxxxxs"
-			"sxxxxxxxxxxxxxxs"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"ssssssssssssssss";
-
-		/*
-
-		const char* Level =
-			"ssssssssssssssss"
-			"s............xxs"
-			"s.......xb.....s"
-			"s.......x......s"
-			"s.......x......s"
-			"s.......s......s"
-			"s.p..b..s......s"
-			"sxxxxxx.s......s"
-			"s.......s......s"
-			"s..............s"
-			"s......x.......s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"ssssssssssssssss";
+		
 		
 		/*
-		
-		//TODO(ian): this is pretty cool :)
 		const char* Level =
 			"ssssssssssssssss"
 			"s..............s"
@@ -4913,112 +5504,10 @@ main(int argc, char* argv[])
 		
 		
 		*/
-		/*
-		//TODO(ian): this is much better! Keep/iterate
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s.......b.bp...s"
-			"s.......xxxxxxxs"
-			"s.....s........s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"sxxxx..........s"
-			"s..............s"
-			"s..............s"
-			"ssssssssssssssss";
-
-		/*
-		//TODO(ian): this is much better! Keep/iterate
-		const char* Level =
-			"ssssssssssssssss"
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s.....s.b.bp...s"
-			"s.......xxxxxxxs"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"sxxxx..........s"
-			"s..............s"
-			"s..............s"
-			"ssssssssssssssss";
-		/*
-		//TODO(ian): this is much better! Keep/iterate
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..........b...s"
-			"s..........xb..s"
-			"s..........p...s"
-			"s.......xxxxxxxs"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"sxxxx..........s"
-			"s..............s"
-			"s..............s"
-			"ssssssssssssssss";
 		
-		
-		/*
-		//TODO(ian): need to find out whether the diagonal control scheme is simple enough to be found out by accident!!
-		//NOTE(ian): this is pretty good. Keep/iterate upon this concept!!!
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"sp....b.b......s"
-			"sxxxxxxxs......s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s.............ss"
-			"s.............ss"
-			"s..........b...s"
-			"s..........xxxxs"
-			"s..............s"
-			"s..............s"
-			"ssssssssssssssss";
 		
 
-		/*
-
 		
-
-		//NOTE(ian): this is a good reprise :)
-		const char* Level =
-			"ssssssssssssssss"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"sp..b.b...s....s"
-			"sxxxxxxxs......s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s.............bs"
-			"s..........xxxxs"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"s..............s"
-			"ssssssssssssssss";
-		
-		*/
 
 		/*
 			enum block_attributes {

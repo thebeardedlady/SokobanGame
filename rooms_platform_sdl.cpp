@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <math.h>
 #include <Windows.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb-master/stb_image.h"
 
 #define local_persist static
 #define global_variable static
@@ -2612,7 +2614,11 @@ DrawRect(texture Output, texture Input, r2 Screen, r2 Rect)
 			{
 				InputX = (s32)Pos.X;
 				InputY = (s32)Pos.Y;
-				Output.Texels[Y * Output.Width + X] = Input.Texels[InputY*Input.Width+InputX];
+				u32 Value = Input.Texels[InputY*Input.Width + InputX];
+				if ((Value >> 24) != 0)
+				{
+					Output.Texels[Y * Output.Width + X] = Value;
+				}
 				Pos.X += Increment.X;
 			}
 
@@ -2694,8 +2700,11 @@ DrawChebyshevBox(texture Output, texture Input, r2 Screen, v2 Origin, r2 Box, r3
 						bary.X = 1.0f - bary.Y;
 						bary.Y = temp;
 					}
-
-					Output.Texels[Y*Output.Width + X] = Input.Texels[((u32)(bary.Y*Input.Height))*Input.Width + ((u32)(bary.X*Input.Width))];
+					u32 Value = Input.Texels[((u32)(bary.Y*Input.Height))*Input.Width + ((u32)(bary.X*Input.Width))];
+					if ((Value >> 24) != 0)
+					{
+						Output.Texels[Y*Output.Width + X] = Value;
+					}
 				}
 
 				Point.X += BoundingBox.W;
@@ -2745,7 +2754,8 @@ enum block_attributes {
 	LINKS_TO_CRATES = 1024,
 	LINKS_TO_CREATURES = 2048,
 	LINKS_TO_HINGES = 4096,
-	STICKS_TO_HINGES = 8192
+	STICKS_TO_HINGES = 8192,
+	SPECIAL_BLOCK = 16384
 };
 
 typedef struct {
@@ -2876,10 +2886,12 @@ typedef struct {
 	texture WallTextures[2];
 	texture BlockTextures[2];
 	texture PlayerTexture;
+	texture BackGroundTexture;
 	prng_state PRNG;
 	i2 PreviousMove;
 	u32 PlayerIndex;
 	b32 DiagonalMove;
+	b32 SpecialAbilityActivated;
 	b32 ChangeBlockType;
 	r32 AgainTime;
 	r64 tSine;
@@ -2897,6 +2909,12 @@ inline block_properties
 InitializeMetriclessWallProperties()
 {
 	return block_properties{ METRICLESS_WALL,STATIONARY };
+}
+
+inline block_properties
+InitializeSpecialBlockProperties()
+{
+	return block_properties{ METRICLESS_CRATE,LINKS_TO_CRATES | STICKS_TO_WALLS | STICKS_TO_HINGES | MOVABLE | ABLE_TO_FALL | SPECIAL_BLOCK | IMMEDIATE_FOOTING_ONLY };
 }
 
 inline block_properties
@@ -2945,6 +2963,13 @@ inline b32
 IsMoveable(block_properties Properties)
 {
 	b32 Result = AreBitsSet((u32)Properties.Attributes, MOVABLE);
+	return Result;
+}
+
+inline b32
+IsSpecialBlock(block_properties Properties)
+{
+	b32 Result = AreBitsSet((u32)Properties.Attributes, SPECIAL_BLOCK);
 	return Result;
 }
 
@@ -3716,6 +3741,7 @@ ImplementMovingRules(game_state* GameState, i2 Move)
 		}
 		else if (Angle <= 7)
 		{
+			//TODO(ian): Change these to LEVELHEIGHT for Y
 			for (u32 Y = 0;
 				Y < LEVELWIDTH;
 				++Y)
@@ -3738,6 +3764,23 @@ ImplementMovingRules(game_state* GameState, i2 Move)
 					}
 				}
 			}
+		}
+
+		if ((Angle & 1) == 1 && GameState->SpecialAbilityActivated)
+		{
+			for (u32 I = 0;
+				I < LEVELHEIGHT*LEVELWIDTH;
+				++I)
+			{
+				block Cell = GameState->Grid[I];
+				if (IsSpecialBlock(Cell.Properties))
+				{
+					GameState->Grid[I].Properties = block_properties{ 0,0 };
+					break;
+				}
+			}
+
+			GameState->Grid[PlayerPos.Y*LEVELWIDTH+PlayerPos.X].Properties = InitializeSpecialBlockProperties();
 		}
 
 	}
@@ -4156,13 +4199,13 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 
 
 
-	v2 PlayerCenter = V2((s32)GameState->PlayerIndex%LEVELWIDTH, LEVELHEIGHT - 1 - (s32)GameState->PlayerIndex / LEVELHEIGHT) + V2(0.5f,0.5f);
-	GameState->Screen.P = (0.9f*GameState->Screen.P) + (0.1f*(PlayerCenter-(0.5f*GameState->Screen.Size)));
+	//v2 PlayerCenter = V2((s32)GameState->PlayerIndex%LEVELWIDTH, LEVELHEIGHT - 1 - (s32)GameState->PlayerIndex / LEVELHEIGHT) + V2(0.5f,0.5f);
+	//GameState->Screen.P = (0.9f*GameState->Screen.P) + (0.1f*(PlayerCenter-(0.5f*GameState->Screen.Size)));
 
 
-	i2 BackgroundPos = I2(Hadamard(GameState->Screen.P, v2{ 16.0F,16.0F }));
+	//i2 BackgroundPos = I2(Hadamard(GameState->Screen.P, v2{ 16.0F,16.0F }));
 
-
+	GameState->Screen.Size = v2{ 16.0f,16.0f };
 	for (s32 Y = 0;
 		Y < Window->Height;
 		++Y)
@@ -4171,9 +4214,7 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 			X < Window->Width;
 			++X)
 		{
-			s32 Value = ((Y+BackgroundPos.Y)*Window->Width+X+BackgroundPos.X) & 0x000000ff;
-			s32 Color = (Value << 16) | (Value << 8) | (Value << 0);
-			Window->Texels[Y*Window->Width + X] = (u32)Color;
+			Window->Texels[Y*Window->Width + X] = 0;
 		}
 	}
 	
@@ -4199,6 +4240,20 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 				s32 Angle = GetAngle(GameState->PreviousMove);
 				DrawChebyshevBox(*Window, GameState->PlayerTexture, GameState->Screen, RectCenter(Box),Box, (r32)Angle, 0);
 			}
+			else if (IsSpecialBlock(Field))
+			{
+				r2 TextureRect = r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } };
+				if (IsChebyshevCrate(Field))
+				{
+					DrawRect(*Window, GameState->BlockTextures[0], GameState->Screen, TextureRect);
+				}
+				else
+				{
+					DrawRect(*Window, GameState->BlockTextures[1], GameState->Screen, TextureRect);
+				}
+
+				DrawRect(*Window, GameState->Screen, CenterDim(RectCenter(TextureRect), v2{ 0.5f,0.5f }), v4{ 0.456f,0.28643f,0.934f,1.0f });
+			}
 			else if (IsChebyshevCrate(Field))
 			{
 				DrawRect(*Window, GameState->BlockTextures[0], GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } });
@@ -4217,11 +4272,11 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 			}
 			else if (Field.Attributes == 0 && Field.Type == 0)
 			{
-
+				DrawRect(*Window, GameState->BackGroundTexture, GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } });
 			}
 			else
 			{
-				DrawRect(*Window, GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } }, v4{ 0.1f,0.1f,0.545f,1.0f });
+				//DrawRect(*Window, GameState->BackGroundTexture,GameState->Screen, r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } });
 			}
 		}
 	}
@@ -4479,140 +4534,40 @@ main(int argc, char* argv[])
 		GameState.Screen.Size = GameState.Screen.Size * 2.0f;  
 		GameState.AgainTime = 0.0f;
 		Seed(&GameState.PRNG, 100);
+		s32 Num;
 
-		GameState.BlockTextures[0].Width = 64;
-		GameState.BlockTextures[0].Height = 64;
-		GameState.BlockTextures[0].Texels = (u32*)AllocateChunk(GameState.BlockTextures[0].Width*GameState.BlockTextures[0].Height * sizeof(u32));
-		GameState.BlockTextures[1].Width = 64;
-		GameState.BlockTextures[1].Height = 64;
-		GameState.BlockTextures[1].Texels = (u32*)AllocateChunk(GameState.BlockTextures[1].Width*GameState.BlockTextures[1].Height * sizeof(u32));
-		GameState.WallTextures[0].Width = 64;
-		GameState.WallTextures[0].Height = 64;
-		GameState.WallTextures[0].Texels = (u32*)AllocateChunk(GameState.BlockTextures[0].Width*GameState.BlockTextures[0].Height * sizeof(u32));
-		GameState.WallTextures[1].Width = 64;
-		GameState.WallTextures[1].Height = 64;
-		GameState.WallTextures[1].Texels = (u32*)AllocateChunk(GameState.BlockTextures[1].Width*GameState.BlockTextures[1].Height * sizeof(u32));
-		
-		for (s32 y = -32;
-			y < (s32)GameState.BlockTextures[0].Height/2;
-			++y)
+		GameState.WallTextures[0].Texels = (u32*)stbi_load("dngn_metal_wall.png", (s32*)&GameState.WallTextures[0].Width, (s32*)&GameState.WallTextures[0].Height, &Num, 4);
+		printf("\nThe image is %d wide and %d long with %d channels.", GameState.WallTextures[0].Width, GameState.WallTextures[0].Height, Num);
+		if (!GameState.WallTextures[0].Texels)
 		{
-			for (s32 x = -32;
-				x < (s32)GameState.BlockTextures[0].Width/2;
-				++x)
-			{
-				s32 r, g, b;
-				s32 value = Max(Abs(x), Abs(y));
-				if (value > 6 && value < 26)
-				{
-					r = 0;
-					g = 0;
-					b = 0;
-				}
-				else
-				{
-					r = 255;
-					g = 255;
-					b = 255;
-				}
-
-
-				GameState.WallTextures[0].Texels[(y+32)*(s32)GameState.BlockTextures[0].Width + x + 32] = (u32)((r << 16) | (g << 8) | b);
-
-
-				r = (value * 255 * 2) / GameState.BlockTextures[1].Width; 
-				g = b = r;
-
-
-				GameState.WallTextures[1].Texels[(y + 32)*(s32)GameState.BlockTextures[0].Width + x + 32] = (u32)((r << 16) | (g << 8) | b);
-
-
-				if(((value)&8) == 0)
-				{
-					r = 0;
-					g = 0;
-					b = 0;
-				}
-				else
-				{
-					r = 255;
-					g = 255;
-					b = 255;
-				}
-
-
-				GameState.BlockTextures[0].Texels[(y + 32)*(s32)GameState.BlockTextures[0].Width + x + 32] = (u32)((r << 16) | (g << 8) | b);
-
-
-				r = g = b = 128;
-
-
-				GameState.BlockTextures[1].Texels[(y + 32)*(s32)GameState.BlockTextures[0].Width + x + 32] = (u32)((r << 16) | (g << 8) | b);
-			}
+			printf("\nCouldn't load image!!!");
 		}
-
-		GameState.PlayerTexture.Width = 64;
-		GameState.PlayerTexture.Height = 64;
-		GameState.PlayerTexture.Texels = (u32*)AllocateChunk(GameState.BlockTextures[0].Width*GameState.BlockTextures[0].Height * sizeof(u32));
-
-		v2 Center = v2{ (r32)GameState.BlockTextures[0].Width * -0.5f,(r32)GameState.BlockTextures[0].Height * 0.5f };
-		v2 Point = Center;
-		v2 Triangle[3];
-		Triangle[0] = V2( 1.0f,0.0f ) * (r32)GameState.PlayerTexture.Width * 0.3f;
-		Triangle[1] = V2(Cosine(TAU32 / 3.0f), Sine(TAU32/3.0f)) * (r32)GameState.PlayerTexture.Width * 0.3f;
-		Triangle[2] = V2(Cosine(2.0f * TAU32 / 3.0f), Sine(2.0f * TAU32 / 3.0f)) * (r32)GameState.PlayerTexture.Width * 0.3f;
-
-		r32 Determinant = (Triangle[1].Y - Triangle[2].Y) * (Triangle[0].X - Triangle[2].X) + (Triangle[2].X - Triangle[1].X) * (Triangle[0].Y - Triangle[2].Y);
-
-		for (u32 y = 0;
-			y < GameState.PlayerTexture.Height;
-			++y)
+		GameState.WallTextures[1].Texels = (u32*)stbi_load("stone2_dark3.png", (s32*)&GameState.WallTextures[1].Width, (s32*)&GameState.WallTextures[1].Height, &Num, 4);
+		if (!GameState.WallTextures[1].Texels)
 		{
-			for (u32 x = 0;
-				x < GameState.PlayerTexture.Width;
-				++x)
-			{
-				u32 r, g, b;
-				r32 bary[3];
-				bary[0] = (Triangle[1].Y - Triangle[2].Y) * (Point.X - Triangle[2].X) + (Triangle[2].X - Triangle[1].X) * (Point.Y - Triangle[2].Y);
-				bary[0] /= Determinant;
-				bary[1] = (Triangle[2].Y - Triangle[0].Y) * (Point.X - Triangle[2].X) + (Triangle[0].X - Triangle[2].X) * (Point.Y - Triangle[2].Y);
-				bary[1] /= Determinant;
-				bary[2] = 1.0f - bary[0] - bary[1];
-				
-				b32 InsideTriangle = true;
-				for (u32 I = 0;
-					I < 3;
-					++I)
-				{
-					if (bary[I] < 0.0f)
-					{
-						InsideTriangle = false;
-						break;
-					}
-				}
-
-				if (InsideTriangle)
-				{
-					r = 255;
-					g = 255;
-					b = 255;
-				}
-				else
-				{
-					r = 0;
-					g = 0;
-					b = 0;
-				}
-
-				GameState.PlayerTexture.Texels[y*GameState.PlayerTexture.Width + x] = (r << 16) | (g << 8) | b;
-
-				Point.X += 1.0f;
-			}
-
-			Point.X = Center.X;
-			Point.Y -= 1.0f;
+			printf("\nCouldn't load image!!!");
 		}
+		GameState.BlockTextures[0].Texels = (u32*)stbi_load("crystal_wall12.png", (s32*)&GameState.BlockTextures[0].Width, (s32*)&GameState.BlockTextures[0].Height, &Num, 4);
+		if (!GameState.BlockTextures[0].Texels)
+		{
+			printf("\nCouldn't load image!!!");
+		}
+		GameState.BlockTextures[1].Texels = (u32*)stbi_load("dngn_transparent_wall.png", (s32*)&GameState.BlockTextures[1].Width, (s32*)&GameState.BlockTextures[1].Height, &Num, 4);
+		if (!GameState.BlockTextures[1].Texels)
+		{
+			printf("\nCouldn't load image!!!");
+		}
+		GameState.PlayerTexture.Texels = (u32*)stbi_load("orb_of_destruction2.png", (s32*)&GameState.PlayerTexture.Width, (s32*)&GameState.PlayerTexture.Height, &Num, 4);
+		if (!GameState.PlayerTexture.Texels)
+		{
+			printf("\nCouldn't load image!!!");
+		}
+		GameState.BackGroundTexture.Texels = (u32*)stbi_load("dngn_wax_wall.png", (s32*)&GameState.BackGroundTexture.Width, (s32*)&GameState.BackGroundTexture.Height, &Num, 4);
+		if (!GameState.BackGroundTexture.Texels)
+		{
+			printf("\nCouldn't load image!!!");
+		}
+		GameState.SpecialAbilityActivated = true;
 
 
 		//NOTE(ian): high concept pitch: a cross between catherine and snakebird
@@ -4870,24 +4825,43 @@ main(int argc, char* argv[])
 
 		//NOTE(ian): this is a good reprise :)
 		const char* Level =
-		"ssssssssssssssss"
-		"s..............s"
-		"s..............s"
-		"s..............s"
-		"sp..b.b...s....s"
-		"sxxxxxxxs......s"
-		"s..............s"
-		"s..............s"
-		"s..............s"
-		"s.............bs"
-		"s..........xxxxs"
-		"s..............s"
-		"s..............s"
-		"s..............s"
-		"s..............s"
-		"ssssssssssssssss";
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"sp..b.b...s....s"
+			"sxxxxxxxs......s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s.............bs"
+			"s..........xxxxs"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
 
 		*/
+		/*
+		//NOTE(ian): this is a good reprise :)
+		const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"sp..b.b........s"
+			"sxxxxxxx.......s"
+			"s........sss...s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..........xxxxs"
+			"ssssssssssssssss";
+
 
 
 		/*
@@ -4970,8 +4944,8 @@ main(int argc, char* argv[])
 			"sp......xs.....s"
 			"sxxxxxxxxsssssss"
 			"ssssssssssssssss";
-
-
+		*/
+		/*
 		//NOTE(ian): keep/iterate - this concept should be taught
 		const char* Level =
 			"ssssssssssssssss"
@@ -5060,6 +5034,7 @@ main(int argc, char* argv[])
 		//NOTE(ian): Metricless Block levels ~3
 
 		*/
+		/*
 		//NOTE(ian): much better!
 		const char* Level =
 			"ssssssssssssssss"
@@ -5146,44 +5121,65 @@ main(int argc, char* argv[])
 
 		//NOTE(ian): Flying levels ~4
 
+		
 		/*
-
 		const char* Level =
 			"ssssssssssssssss"
+			"s.........xxxxxs"
 			"s..............s"
-			"s..............s"
-			"sbxx......bxxxxs"
-			"sbx..........bxs"
-			"sxb...........ps"
-			"sx...........bxs"
-			"sx.........xxxxs"
 			"sx.............s"
-			"sxxxxx.........s"
+			"s..............s"
+			"s..............s"
+			"s...........b..s"
+			"s..........b...s"
+			"s...........bp.s"
+			"s.......ssxxxxxs"
 			"s..............s"
 			"s..............s"
 			"s..............s"
 			"s..............s"
 			"s..............s"
 			"ssssssssssssssss";
+		
 
+		/*
+		const char* Level =
+			"ssssssssssssssss"
+			"sxbb......xxxxxs"
+			"sbx............s"
+			"sb.b......xxxx.s"
+			"sb..........bx.s"
+			"sxb..........p.s"
+			"s...........bx.s"
+			"s.........xxxxxs"
+			"s..............s"
+			"sxxxx..........s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
+		
+		
 		/*
 		//NOTE(ian): this is a neat idea and it's much better! :)
 		const char* Level =
 			"ssssssssssssssss"
 			"s..............s"
 			"s..............s"
-			"s..............s"
-			"s.........b....s"
-			"sssss....bd.x..s"
-			"s.........b....s"
-			"s..............s"
-			"s............x.s"
-			"s..............s"
-			"s............b.s"
-			"sssss........x.s"
-			"s............b.s"
-			"s...........p..s"
-			"s...........xxxs"
+			"s.......b......s"
+			"s......b.......s"
+			"s.......b...p..s"
+			"s......xxxxxxxxs"
+			"s......s.......s"
+			"s......sss.....s"
+			"s........s.....s"
+			"s........sss...s"
+			"s..........s...s"
+			"sss........sss.s"
+			"s.s..........s.s"
+			"s.sss........sss"
 			"ssssssssssssssss";
 
 
@@ -5203,33 +5199,51 @@ main(int argc, char* argv[])
 			"s.s....,....s.ss"
 			"ss.s..bbb...bs.s"
 			"s.s.s..p.b..sbss"
-			"ss.s.s.b..b..s.s"
-			"s.s.s...bb..s.ss"
+			"ss.s.s.b.b...s.s"
+			"s.s.s...b...s.ss"
 			"ss.s.s.s...s.s.s"
 			"ssssssssssssssss";
 
 
-		/*
+		*/
+		
 		//NOTE(ian): this is neat but is this the best way to present it?
+		
 		const char* Level =
 			"ssssssssssssssss"
-			"s.......s......s"
-			"s.......sss....s"
-			"s.........s....s"
-			"s.........sss..s"
-			"s...........s..s"
-			"s...........ssss"
-			"s..............s"
-			"sss............s"
-			"s.s.......bx...s"
+			"s......s.......s"
+			"s......sss.....s"
+			"s........s.....s"
+			"s........sss...s"
+			"s..........s...s"
+			"s..........sss.s"
+			"s............s.s"
+			"sss..........sss"
+			"s.s............s"
 			"s.sss..........s"
 			"s...s.......b..s"
 			"s...sss....b...s"
-			"s.....s.....b.ps"
-			"sssssssssxxxxxxs"
+			"s.....s.....bbps"
+			"s.....sssxxxxxxs"
 			"ssssssssssssssss";
-
-		*/
+		/*
+		const char* Level =
+			"ssssssssssssssss"
+			"s...s..........s"
+			"s...s..........s"
+			"s.sss..........s"
+			"s.s............s"
+			"sss.........b..s"
+			"s..........b...s"
+			"s........b..b.ps"
+			"s........xxxxxxs"
+			"s........s.....s"
+			"s......sss.....s"
+			"s......s.......s"
+			"s....sss.......s"
+			"s....s.........s"
+			"s..sss.........s"
+			"ssssssssssssssss";
 		
 
 		//NOTE(ian): Garbage/Misc

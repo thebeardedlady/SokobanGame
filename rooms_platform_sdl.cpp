@@ -2716,7 +2716,6 @@ DrawRect(texture Output, r2 Screen, r2 Rect, v4 Color)
 		s32 Temp = MinY;
 		MinY = Output.Height - MaxY;
 		MaxY = Output.Height - Temp;
-
 		for (s32 Y = MinY;
 			Y < MaxY;
 			++Y)
@@ -2753,6 +2752,7 @@ DrawRect(texture Output, texture Input, r2 Screen, r2 Rect)
 		InputMaxX = (s32)(Input.Width * ((Clip.X + Clip.W - Rect.X) / Rect.W));
 		InputMaxY = (s32)(Input.Height * ((Clip.Y + Clip.H - Rect.Y) / Rect.H));
 
+
 		v2	Increment = v2{ (r32)(InputMaxX - InputMinX) / (r32)(MaxX - MinX),(r32)(InputMaxY - InputMinY) / (r32)(MaxY - MinY) };
 		v2 Pos = v2{ (r32)InputMinX,(r32)InputMinY };
 		s32 Temp = MinY;
@@ -2763,14 +2763,15 @@ DrawRect(texture Output, texture Input, r2 Screen, r2 Rect)
 			Y < MaxY;
 			++Y)
 		{
+			InputY = (s32)Pos.Y;
+			u32* RowPointer = &Input.Texels[InputY*Input.Width];
 			for (s32 X = MinX;
 				X < MaxX;
 				++X)
 			{
 				InputX = (s32)Pos.X;
-				InputY = (s32)Pos.Y;
-				u32 Value = Input.Texels[InputY*Input.Width + InputX];
-				if ((Value >> 24) != 0)
+				u32 Value = RowPointer[InputX];
+				if ((Value >> 24))
 				{
 					Output.Texels[Y * Output.Width + X] = Value;
 				}
@@ -2974,11 +2975,11 @@ typedef struct {
 	r32 dt;
 }user_input;
 
-#define NUM_UNDO_BYTES 10000
+#define MAX_UNDO_WORDS 10000
 typedef struct {
-	s32 Bytes[NUM_UNDO_BYTES];
+	s32 Words[MAX_UNDO_WORDS];
 	s32 NumEntries;
-	s32 NumBytes;
+	s32 NumWords;
 } undo_stack;
 
 
@@ -2999,11 +3000,13 @@ typedef struct {
 	texture BlockTextures[2];
 	texture PlayerTexture;
 	texture BackGroundTexture;
+	texture Controls;
 	prng_state PRNG;
 	i2 PreviousMove;
 	s32 PlayerIndex;
 	s32 GameplayFlags;
 	s32 RecentEvent;
+	s32 UndoCount;
 	r32 AgainTime;
 	r64 tSine;
 	u16 SoundOffset;
@@ -3259,37 +3262,74 @@ Ray2D(v2 Ray, v2 RayPoint, v2 LinePoint, v2 LineRay)
 	return Variables;
 }
 
+
+internal r32
+GetUndoWaitTime(s32 NumUndos)
+{
+	r32 Result = 0.0f;
+	if (NumUndos < 10)
+	{
+		Result = 0.3f;
+	}
+	else if (NumUndos < 25)
+	{
+		Result = 0.2f;
+	}
+	else if (NumUndos < 50)
+	{
+		Result = 0.1f;
+	}
+	else if (NumUndos < 100)
+	{
+		Result = 0.05f;
+	}
+
+	return Result;
+}
+
+
 internal void
 PushOntoUndoStack(s8*Level, i2 LevelSize,i2  Move,s32* Indices,s32 NumIndices, undo_stack* UndoStack)
-{
-	
+{	
 
+	s32 Diff = 0;
+	Diff += (Move.X > 0 ? 1 : (Move.X < 0 ? -1 : 0));
+	Diff += (Move.Y > 0 ? LevelSize.X : (Move.Y < 0 ? -LevelSize.X : 0));
+
+	for (s32 I = 0;
+		I < NumIndices;
+		++I)
+	{
+		UndoStack->Words[UndoStack->NumWords++] = (s32)Level[Indices[I]];
+		UndoStack->Words[UndoStack->NumWords++] = Indices[I] + Diff;
+	}
+
+	UndoStack->Words[UndoStack->NumWords++] = -Diff;
+	UndoStack->Words[UndoStack->NumWords++] = NumIndices;
+	++UndoStack->NumEntries;
 }
 
 internal void
-UndoTurn(s8 *Grid, i2 LevelSize, s32* PreviousState,u32* TotalStateBytes,u32* TotalStateEntries)
+UndoTurn(game_state* GameState, s8 *Level, i2 LevelSize, undo_stack* UndoStack)
 {
-	for (s32 I = 0;
-		I < LevelSize.Y*LevelSize.X;
-		++I)
+	s32 NumLeftWords = UndoStack->NumWords - (2 * (UndoStack->Words[UndoStack->NumWords - 1] + 1));
+	s32 Diff = UndoStack->Words[UndoStack->NumWords - 2];
+	for (s32 I = NumLeftWords;
+		I < UndoStack->NumWords - 2;
+		I += 2)
 	{
-		if (IsMoveable(Grid[I]))
+		s32 IndexToErase = UndoStack->Words[I + 1];
+		Level[IndexToErase] = '.';
+		Level[IndexToErase + Diff] = (s8)UndoStack->Words[I];
+		if (IsPlayer(UndoStack->Words[I]))
 		{
-			Grid[I] = '.';
+			GameState->PlayerIndex = IndexToErase + Diff;
 		}
 	}
 
-	s32 TotalStuff = 0;
-	for (u32 I = *TotalStateBytes - (s32)PreviousState[*TotalStateBytes - 2] - 2;
-		PreviousState[I+1] != -1;
-		I += 2)
-	{
-		TotalStuff += 2;
-		Grid[PreviousState[I + 1]] = (s8)PreviousState[I];
-	}
+	UndoStack->NumWords = NumLeftWords;
+	--UndoStack->NumEntries;
 
-	*TotalStateBytes -= TotalStuff + 2;
-	--(*TotalStateEntries);
 
 }
 
@@ -3298,25 +3338,6 @@ internal void
 RestartTurn(s8 *Grid, i2 LevelSize, s32* PreviousState, u32*TotalStateBytes, u32* TotalStateEntries)
 {
 
-	for (s32 I = 0;
-		I < LevelSize.Y*LevelSize.X;
-		++I)
-	{
-		if (IsMoveable(Grid[I]))
-		{
-			Grid[I] = '.';
-		}
-	}
-
-	for (u32 I = 0;
-		PreviousState[I+1] != -1;
-		I += 2)
-	{
-		Grid[PreviousState[I + 1]] = (s8)PreviousState[I];
-	}
-
-	*TotalStateBytes = 0;
-	*TotalStateEntries = 0;
 }
 
 
@@ -3604,82 +3625,7 @@ IsFalling(s8* Grid, i2 LevelSize, s32* Indices, s32* NumIndices, s32 X, s32 Y, s
 
 
 
-/*
-internal b32
-AreAllBlocksMoving(game_state* GameState, u32* Indices, u32* NumIndices, u32 X, u32 Y)
-{
-	b32 Moving = true;
-	for (u32 I = 0;
-		I < 3;
-		++I)
-	{
-		for (u32 J = 0;
-			J < 3;
-			++J)
-		{
 
-			u32 Index = (Y + I - 1)*LEVELWIDTH + X + J - 1;
-			if (IsChebyshevCrate(GameState->Grid[Index].Properties))
-			{
-				b32 AlreadyFound = false;
-				for (u32 K = 0;
-					K < *NumIndices;
-					++K)
-				{
-					if (Index == Indices[K])
-					{
-						AlreadyFound = true;
-						break;
-					}
-				}
-				if (!AlreadyFound)
-				{
-					Indices[(*NumIndices)++] = Index;
-					if ((LengthSq(GameState->Grid[Index].Move) != 0.0f))
-					{
-						if (!AreAllBlocksMoving(GameState, Indices, NumIndices, X + J - 1, Y + I - 1))
-						{
-							return false;
-						}
-					}
-					else
-					{
-						return false;
-					}
-				}
-			}
-		}
-	}
-	return Moving;
-}
-
-/*
-internal void
-ApplyMoveToBlocks(game_state* GameState, i2* Indices, u32* NumIndices, i2 Move, s32 X, s32 Y, i2* Movers)
-{
-	for (s32 I = -1;
-		I < 2;
-		++I)
-	{
-		for (s32 J = -1;
-			J < 2;
-			++J)
-		{
-
-			u32 Index = (u32)((Y + I)*GameState->LevelSize.X + X + J);
-			if (IsChebyshevCrate(GameState->Level[Index]))
-			{
-				if (!AlreadyTagged(Indices, *NumIndices, i2{X+J,Y+I}))
-				{
-					Indices[(*NumIndices)++] = i2{ X + J,Y + I };
-					GameState->Grid[Index].Move = Move;
-					ApplyMoveToBlocks(GameState, Indices, NumIndices, Move, X + J, Y + I);
-				}
-			}
-		}
-	}
-}
-*/
 
 internal void
 PushBlocksOnMoveStack(game_state* GameState, s32* Indices, s32* NumIndices, i2* Movers, i2 Move, s32 X, s32 Y)
@@ -3805,7 +3751,7 @@ CheckCrateRules(game_state* GameState, i2 Move, s32* Indices, i2* Movers, s32* N
 			I < *NumIndices;
 			++I)
 		{
-			if (TLength(Movers[I]) != 0)
+			if (TLength(Movers[I]) != 0 && !IsPlayer(GameState->Level[Indices[I]]))
 			{
 				i2 NearPos = i2{ (s32)(Indices[I] % GameState->LevelSize.X),(s32)(Indices[I] / GameState->LevelSize.X) };
 				NearPos = NearPos + Movers[I];
@@ -3821,19 +3767,17 @@ CheckCrateRules(game_state* GameState, i2 Move, s32* Indices, i2* Movers, s32* N
 				}
 				else
 				{
-					IsStopped = (IsChebyshevCrate(Cell) && LengthSq(Movers[IndicesIndex]) == 0)
+					IsStopped = (IsChebyshevWall(Cell) || IsMetriclessWall(Cell) || IsPlayer(Cell))
+						|| (IsChebyshevCrate(Cell) && LengthSq(Movers[IndicesIndex]) == 0)
 						|| (IsMetriclessCrate(Cell) && LengthSq(Movers[IndicesIndex]) == 0);
 				}
 
 
 				if (IsStopped)
 				{
-					Movers[I] = i2{ 0,0 };
 					if (IsChebyshevCrate(GameState->Level[Indices[I]]))
 					{
-						s32 TempIndices[100];
-						s32 TempNumIndices = 0;
-						ApplyMoveToBlocks(GameState, TempIndices, Movers, &TempNumIndices, i2{ 0,0 }, NearPos.X, NearPos.Y);
+						ApplyMoveToBlocks(GameState, Indices, Movers, NumIndices, i2{ 0,0 }, NearPos.X-Movers[I].X, NearPos.Y-Movers[I].Y);
 					}
 					FoundPattern = true;
 				}
@@ -3862,14 +3806,19 @@ SetUpPlayerMove(game_state* GameState, i2 Move, s32* Indices, s32* NumIndices)
 	if (IsChebyshevWall(GameState->Level[AdjacentIndex]) || IsMetriclessWall(GameState->Level[AdjacentIndex])) //#2 Player against Wall/spike
 	{
 		Movers[0] = i2{ 0,0 };
+		*NumIndices = 0;
 	}
 	else if (IsEmpty(GameState->Level[AdjacentIndex])) // #4 Player in empty square
 	{
 		if (!IsSticky(GameState->Level, GameState->LevelSize, Indices, NumIndices, PlayerPos.X + Move.X, PlayerPos.Y+Move.Y))
 		{
+			*NumIndices = 0;
 			Movers[0] = i2{ 0,0 };
 		}
-		*NumIndices = 1;
+		else
+		{
+			*NumIndices = 1;
+		}
 	}
 	else if (IsMetriclessCrate(GameState->Level[AdjacentIndex]) || IsChebyshevCrate(GameState->Level[AdjacentIndex])) // #5  player pushes block
 	{
@@ -3906,8 +3855,13 @@ PerformMove(game_state* GameState, i2 Move, s32* Indices, s32 NumIndices)
 		I < NumIndices;
 		++I)
 	{
+
 		u32 NearbyIndex = (Move.Y + (Indices[I] / GameState->LevelSize.X))*GameState->LevelSize.X + Move.X + (Indices[I] % GameState->LevelSize.X);
 		GameState->Level[NearbyIndex] = GameState->Level[Indices[I]];
+		if (IsPlayer(GameState->Level[Indices[I]]))
+		{
+			GameState->PlayerIndex = NearbyIndex;
+		}
 		GameState->Level[Indices[I]] = '.';
 	}
 
@@ -4073,9 +4027,9 @@ ExecuteTurn(game_state* GameState, u32 Pressed, u32 Held)
 
 	if (NumIndices > 0)
 	{
-		if (GameState->UndoStack.NumBytes < NUM_UNDO_BYTES)
+		if (GameState->UndoStack.NumWords + 2*(NumIndices+1) < MAX_UNDO_WORDS)
 		{
-			//PushOntoUndoStack(GameState->Level,GameState->LevelSize,Move,Indices,NumIndices);
+			PushOntoUndoStack(GameState->Level,GameState->LevelSize,Move,Indices,NumIndices, &GameState->UndoStack);
 		}
 		PerformMove(GameState, Move, Indices, NumIndices);
 	}
@@ -4098,15 +4052,15 @@ GetEventWaitTime(u32 Event)
 	}
 	else if(Event == MOVED_LATERALLY)
 	{
-		Result = 0.0f / 60.0f;
+		Result = 7.0f / 60.0f;
 	}
 	else if (Event == MOVED_DIAGONALLY)
 	{
-		Result = 4.240f / 60.0f;
+		Result = 11.20f / 60.0f;
 	}
 	else if (Event == SINGLE_STEP_FALL)
 	{
-		Result = 2.0f / 60.0f;
+		Result = 9.0f / 60.0f;
 	}
 	else if (Event == CRATE_CHANGED_STATE)
 	{
@@ -4119,8 +4073,7 @@ GetEventWaitTime(u32 Event)
 
 
 internal void
-GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
-	u8 *SoundData, s32 BytesToWrite, u16 Samples)
+GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window)
 {
 
 	for (s32 Y = 0;
@@ -4136,7 +4089,7 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 	}
 
 	i2 Move = { 0 };
-	r32 AgainTime = 0.2f;
+	r32 AgainTime = 0.1f;
 	u32 Pressed = 0, Held = 0;
 	if (!Input->Up.PreviousPressed && Input->Up.CurrentPressed)
 	{
@@ -4224,21 +4177,27 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 		}
 	}
 
-	
-
 
 	if (GameState->UndoStack.NumEntries > 0)
 	{
 		if (!Input->Undo.PreviousPressed && Input->Undo.CurrentPressed)
 		{
-			
+			UndoTurn(GameState,GameState->Level, GameState->LevelSize, &GameState->UndoStack);
+			++GameState->UndoCount;
 		}
 		else if (Input->Undo.PreviousPressed && Input->Undo.CurrentPressed)
 		{
-			if (Input->Undo.TimeHeld >= AgainTime)
+			r32 TimeToWait = GetUndoWaitTime(GameState->UndoCount);
+			if (Input->Undo.TimeHeld >= TimeToWait)
 			{
-				
+				UndoTurn(GameState, GameState->Level, GameState->LevelSize, &GameState->UndoStack);
+				Input->Undo.TimeHeld -= TimeToWait;
+				++GameState->UndoCount;
 			}
+		}
+		else
+		{
+			GameState->UndoCount = 0;
 		}
 
 		if (!Input->Restart.PreviousPressed && Input->Restart.CurrentPressed)
@@ -4301,17 +4260,28 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 	if (GameState->AgainTime >= WaitTime)
 	{
 		//printf("\nBeforeExecutingTurn:\n%s", GameState->Level);
+		s32 PreviousEvent = GameState->RecentEvent;
 		GameState->RecentEvent = ExecuteTurn(GameState, Pressed, Held);
-		GameState->AgainTime = 0.0f;
+		if (WaitTime > 0.0f)
+		{
+			GameState->AgainTime -= WaitTime;
+		}
+		else
+		{
+			GameState->AgainTime = 0.0f;
+		}
 	}
-
+	WaitTime = GetEventWaitTime(GameState->RecentEvent);
 
 	//printf("\nBefore Rendering:\n%s", GameState->Level);
 	
 	v2 PlayerPos = V2((s32)(GameState->PlayerIndex%GameState->LevelSize.X), (s32)(GameState->PlayerIndex / GameState->LevelSize.X)) + V2(0.5f,0.5f);
+	v2 OldPlayerPos = PlayerPos - V2(GameState->PreviousMove);
 	
-	GameState->Screen.P = 0.99f * GameState->Screen.P + 0.01f * (PlayerPos-0.5f*GameState->Screen.Size);
-	//GameState->Screen.P = v2{ 70.0f,70.0f };
+	
+	
+	//GameState->Screen.P = (PlayerPos-0.5f*GameState->Screen.Size);
+	GameState->Screen.P = 0.95f*GameState->Screen.P + 0.05f*(PlayerPos - 0.5f*GameState->Screen.Size);
 	for (s32 Y = 0;
 		Y < Window->Height;
 		++Y)
@@ -4320,9 +4290,11 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 			X < Window->Width;
 			++X)
 		{
-			Window->Texels[Y*Window->Width + X] = 0;
+			Window->Texels[Y*Window->Width + X] = 0x00000000;
 		}
 	}
+	//DrawRect(*Window, GameState->Screen, CenterDim(OldPlayerPos, v2{ 1.0f,1.0f }), v4{ 1.0f,0.0f,0.0f,1.0f });
+	//DrawRect(*Window, GameState->Screen, CenterDim(PlayerPos, v2{ 1.0f,1.0f }), v4{ 0.0f,1.0f,0.0f,1.0f });
 	
 	b2 Bounds = B2(GameState->Screen);
 	
@@ -4353,9 +4325,7 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 			}
 			else if (IsPlayer(Field))
 			{
-				//r2 Box = r2{ v2{ (r32)X,(r32)(LEVELHEIGHT - Y - 1) },v2{ 1.0f,1.0f } };
-				//s32 Angle = GetAngle(GameState->PreviousMove);
-				//DrawChebyshevBox(*Window, GameState->PlayerTexture, GameState->Screen, RectCenter(Box),Box, (r32)Angle, 0);
+				
 				DrawRect(*Window, GameState->PlayerTexture, GameState->Screen, TextureRect);
 			}
 			else if (IsChebyshevCrate(Field))
@@ -4379,7 +4349,11 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 			}
 			else if (IsEmpty(Field))
 			{
-				DrawRect(*Window, GameState->BackGroundTexture, GameState->Screen, TextureRect);
+				//DrawRect(*Window, GameState->BackGroundTexture, GameState->Screen, TextureRect);
+			}
+			else if (Field == 'w')
+			{
+				DrawRect(*Window, GameState->Controls, GameState->Screen, R2(TextureRect.P, Hadamard(TextureRect.Size, v2{ 3.0f,2.0f })));
 			}
 			/*
 			else if (IsSpecialBlock(Field))
@@ -4574,7 +4548,7 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 	*/
 
 
-
+	/*
 	if (GameState->SoundOffset > 30000)
 	{
 		GameState->SoundOffset = 30000;
@@ -4597,6 +4571,7 @@ GameUpdateAndRender(game_state *GameState, user_input *Input, texture *Window,
 			GameState->tSine += dt;
 		}
 	}
+	*/
 }
 
 
@@ -4607,39 +4582,63 @@ main(int argc, char* argv[])
 	game_state GameState = {};
 
 
+	FILE* Log;
+	s32 Error = (s32)fopen_s(&Log, "log.txt", "w");
+
+	if (Error != 0)
+	{
+		printf("Opening \'log.txt\' was unsuccesful.\nPress 0 then ENTER to quit.");
+		scanf_s("%d", &Error);
+		return -1;
+	}
+
+
 	texture WindowTexture;
 	WindowTexture.Width = 512;
 	WindowTexture.Height = 512;
 
 	SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER);
 
+	fprintf(Log, "Creating Window...");
+
 	SDL_Window *Window = SDL_CreateWindow("Rooms", SDL_WINDOWPOS_UNDEFINED,
 		SDL_WINDOWPOS_UNDEFINED, WindowTexture.Width, WindowTexture.Height, 0);
+
+	if (Window)
+	{
+		fprintf(Log, "Successful\n");
+	}
+	else
+	{
+		fprintf(Log, "Failed");
+		//fclose(F);
+		return -1;
+	}
 
 
 	SDL_Surface *Surface = SDL_GetWindowSurface(Window);
 
 	u32 Format = Surface->format->format;
 
-	printf("The Pixel Format is %s\n", SDL_GetPixelFormatName(Surface->format->format));
-	printf("Red mask is %x\n", Surface->format->Rmask);
-	printf("Green mask is %x\n", Surface->format->Gmask);
-	printf("Blue mask is %x\n", Surface->format->Bmask);
-	printf("Alpha mask is %x\n", Surface->format->Amask);
+	//printf("The Pixel Format is %s\n", SDL_GetPixelFormatName(Surface->format->format));
+	//printf("Red mask is %x\n", Surface->format->Rmask);
+	//printf("Green mask is %x\n", Surface->format->Gmask);
+	//printf("Blue mask is %x\n", Surface->format->Bmask);
+	//printf("Alpha mask is %x\n", Surface->format->Amask);
 
 	//Pixel Mask is (in hex) XX RR GG BB
 
 
+	/*
+	//SDL_AudioSpec DesiredAudio = {}, ObtainedAudio;
+	//DesiredAudio.freq = 48000;
+	//DesiredAudio.format = AUDIO_U8;
+	//DesiredAudio.channels = 1;
+	//DesiredAudio.samples = 4096;
+	//DesiredAudio.callback = 0;
 
-	SDL_AudioSpec DesiredAudio = {}, ObtainedAudio;
-	DesiredAudio.freq = 48000;
-	DesiredAudio.format = AUDIO_U8;
-	DesiredAudio.channels = 1;
-	DesiredAudio.samples = 4096;
-	DesiredAudio.callback = 0;
-
-	SDL_AudioDeviceID AudioDeviceID = SDL_OpenAudioDevice(0, 0, &DesiredAudio,
-		&ObtainedAudio, SDL_AUDIO_ALLOW_ANY_CHANGE);
+	//SDL_AudioDeviceID AudioDeviceID = SDL_OpenAudioDevice(0, 0, &DesiredAudio,
+		//&ObtainedAudio, SDL_AUDIO_ALLOW_ANY_CHANGE);
 
 
 	if (DesiredAudio.format != ObtainedAudio.format) {
@@ -4658,47 +4657,62 @@ main(int argc, char* argv[])
 		}
 		return 5;
 	}
+	*/
 
 	
 	{
-		GameState.Screen = R2(v2{ 0.0f,0.0f }, v2{ (r32)LEVELWIDTH,(r32)LEVELHEIGHT });
-		GameState.Screen.Size = GameState.Screen.Size * 2.0f;  
+		GameState.Screen = R2(v2{ 0.0f,0.0f }, v2{ 19.0f,19.0f});
+		//GameState.Screen.Size = GameState.Screen.Size;  
 		GameState.AgainTime = 0.0f;
 		Seed(&GameState.PRNG, 100);
 		s32 Num;
 
+		fprintf(Log, "Loading Textures...");
+
+
 		GameState.WallTextures[0].Texels = (u32*)stbi_load("dngn_metal_wall.png", (s32*)&GameState.WallTextures[0].Width, (s32*)&GameState.WallTextures[0].Height, &Num, 4);
-		printf("\nThe image is %d wide and %d long with %d channels.", GameState.WallTextures[0].Width, GameState.WallTextures[0].Height, Num);
+		//printf("\nThe image is %d wide and %d long with %d channels.", GameState.WallTextures[0].Width, GameState.WallTextures[0].Height, Num);
 		if (!GameState.WallTextures[0].Texels)
 		{
-			printf("\nCouldn't load image!!!");
+			fprintf(Log, "Failed: Couldn't load \'dngn_metal_wall.png\'");
+			return -1;
 		}
-		GameState.WallTextures[1].Texels = (u32*)stbi_load("stone2_dark3.png", (s32*)&GameState.WallTextures[1].Width, (s32*)&GameState.WallTextures[1].Height, &Num, 4);
+		GameState.WallTextures[1].Texels = (u32*)stbi_load("wall_yellow_rock0.png", (s32*)&GameState.WallTextures[1].Width, (s32*)&GameState.WallTextures[1].Height, &Num, 4);
 		if (!GameState.WallTextures[1].Texels)
 		{
-			printf("\nCouldn't load image!!!");
+			fprintf(Log, "Failed: Couldn't load \'wall_yellow_rock0.png\'");
+			return -1;
 		}
 		GameState.BlockTextures[0].Texels = (u32*)stbi_load("crystal_wall12.png", (s32*)&GameState.BlockTextures[0].Width, (s32*)&GameState.BlockTextures[0].Height, &Num, 4);
 		if (!GameState.BlockTextures[0].Texels)
 		{
-			printf("\nCouldn't load image!!!");
+			fprintf(Log, "Failed: Couldn't load \'crystal_wall12.png\'");
+			return -1;
 		}
 		GameState.BlockTextures[1].Texels = (u32*)stbi_load("dngn_transparent_wall.png", (s32*)&GameState.BlockTextures[1].Width, (s32*)&GameState.BlockTextures[1].Height, &Num, 4);
 		if (!GameState.BlockTextures[1].Texels)
 		{
-			printf("\nCouldn't load image!!!");
+			fprintf(Log, "Failed: Couldn't load \'dngn_transparent_wall.png\'");
+			return -1;
 		}
-		GameState.PlayerTexture.Texels = (u32*)stbi_load("orb_of_destruction2.png", (s32*)&GameState.PlayerTexture.Width, (s32*)&GameState.PlayerTexture.Height, &Num, 4);
+		GameState.PlayerTexture.Texels = (u32*)stbi_load("hydra4.png", (s32*)&GameState.PlayerTexture.Width, (s32*)&GameState.PlayerTexture.Height, &Num, 4);
 		if (!GameState.PlayerTexture.Texels)
 		{
-			printf("\nCouldn't load image!!!");
+			fprintf(Log, "Failed: Couldn't load \'hydra4.png\'");
+			return -1;
 		}
-		GameState.BackGroundTexture.Texels = (u32*)stbi_load("dngn_wax_wall.png", (s32*)&GameState.BackGroundTexture.Width, (s32*)&GameState.BackGroundTexture.Height, &Num, 4);
-		if (!GameState.BackGroundTexture.Texels)
+		GameState.Controls.Texels = (u32*)stbi_load("keys-arrow.png", (s32*)&GameState.Controls.Width, (s32*)&GameState.Controls.Height, &Num, 4);
+		if (!GameState.Controls.Texels)
 		{
-			printf("\nCouldn't load image!!!");
+			fprintf(Log, "Failed: Couldn't load \'keys-arrow.png\'");
+			return -1;
 		}
+
+		fprintf(Log, "Successful\n");
+		
 		GameState.AgainTime = 0.0f;
+		GameState.UndoCount = 0;
+		GameState.PreviousMove = i2{ 1,0 };
 
 
 		//NOTE(ian): high concept pitch: a cross between catherine and snakebird
@@ -5000,6 +5014,24 @@ main(int argc, char* argv[])
 			"s..............s"
 			"s..............s"
 			"s..............s"
+			"sxxxxxxxxxxxxxxs"
+			"s..............s"
+			"s..............s"
+			"ssssssssssssssss";
+
+			const char* Level =
+			"ssssssssssssssss"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"s..............s"
+			"sx.............s"
+			"sxs............s"
+			"sx.............s"
+			"sx.............s"
+			"sx..b..b.......s"
+			"sx..x..x.......s"
 			"sxxxxxxxxxxxxxxs"
 			"s..............s"
 			"s..............s"
@@ -6273,29 +6305,59 @@ main(int argc, char* argv[])
 		GameState.PlayerIndex = -1;
 
 		FILE* F;
-		fopen_s(&F, "world_map.txt", "r");
+		assert(fopen_s(&F, "world_map.txt", "r") == 0);
 		fseek(F, 0, SEEK_END);
 		long fsize = ftell(F);
 		fseek(F, 0, SEEK_SET);
-		s32 ByteLength = fsize + 2;
+		s32 ByteLength = fsize + 1;
 		GameState.Level = (s8*)malloc(ByteLength);
+		assert(GameState.Level);
+		GameState.Level[fsize] = 0;
 		fread((void*)GameState.Level, fsize, 1, F);
 		fclose(F);
 
+
+		//GameState.LevelSize = i2{ 121,90 };
+		
+		GameState.LevelSize = i2{0,0};
+
+		fprintf(Log, "Loading \'world_map.txt\'...");
 		for (s32 I = 0;
 			I < ByteLength;
 			++I)
 		{
-			if (GameState.Level[I] == '.')
+			if (GameState.Level[I] == '\n')
 			{
-				GameState.Level = &GameState.Level[I];
-				break;
+				if (GameState.LevelSize.X == 0)
+				{
+					GameState.LevelSize.X = I + 1;
+				}
+				else
+				{
+					if (((I % GameState.LevelSize.X) + 1) != GameState.LevelSize.X)
+					{
+						fprintf(Log, "Failed: world is not rectangular");
+						return -1;
+					}
+				}
+				++GameState.LevelSize.Y;
 			}
 		}
 
+		//printf("\nLength of Level = %d", strlen((char*)GameState.Level));
+
+		if ((ByteLength - 1) != (GameState.LevelSize.X+1) * GameState.LevelSize.Y)
+		{
+			fprintf(Log, "Failed: \'world_map.txt\' is not formatted correctly");
+			return -1;
+		}
+
+
+		fprintf(Log, "Successful\n");
 		
 
-		GameState.LevelSize = i2{ 118,91 };
+		//assert((GameState.LevelSize.X*GameState.LevelSize.Y == (s32)fsize));
+
 		s32 HalfNumRows = (GameState.LevelSize.Y / 2);
 		for (s32 Y = 0;
 			Y < HalfNumRows;
@@ -6313,6 +6375,7 @@ main(int argc, char* argv[])
 			}
 		}
 
+		fprintf(Log, "Searching for player...");
 		b32 FoundPlayer = false;
 		for (s32 Y = 0;
 			Y < GameState.LevelSize.Y;
@@ -6339,18 +6402,27 @@ main(int argc, char* argv[])
 
 		//printf("\n%s", GameState.Level);
 
+		if (GameState.PlayerIndex != -1)
+		{
+			fprintf(Log,"Player Found\n");
+		}
+		else
+		{
+			fprintf(Log, "Failed");
+			return -1;
+		}
 
-		Assert(GameState.PlayerIndex != -1);
-		GameState.PreviousMove = i2{ 1,0 };
+		//Assert(GameState.PlayerIndex != -1);
+		
 	}
 
-	u8 SoundData[8192] = {0};
+	//u8 SoundData[8192] = {0};
 	b32 Running = true;
 	user_input Input = { 0 };
 	Input.dt = 1.0f / 60.0f;
 	u64 BeginFrame = SDL_GetPerformanceCounter();
 	u64 CountFrequency = SDL_GetPerformanceFrequency();
-	SDL_PauseAudioDevice(AudioDeviceID, 0);
+	//SDL_PauseAudioDevice(AudioDeviceID, 0);
 
 
 	Input.Up.KeyOne = SDL_SCANCODE_UP;
@@ -6379,6 +6451,9 @@ main(int argc, char* argv[])
 
 	r32 SecondCounter = 0.0f;
 	u32 FPS = 0;
+
+
+	fprintf(Log, "Running Program...");
 
 	while (Running)
 	{
@@ -6455,12 +6530,9 @@ main(int argc, char* argv[])
 			Input.Action.TimeHeld = 0.0f;
 		}
 
-		s32 BytesToWrite = (s32)sizeof(SoundData) - (s32)SDL_GetQueuedAudioSize(AudioDeviceID);
-
 		WindowTexture.Texels = (u32*)Surface->pixels;
 		GameState.Window = &WindowTexture;
-		GameUpdateAndRender(&GameState, &Input, &WindowTexture, SoundData, BytesToWrite,
-			ObtainedAudio.samples);
+		GameUpdateAndRender(&GameState, &Input, &WindowTexture);
 		
 		Input.Up.PreviousPressed = Input.Up.CurrentPressed;
 		Input.Down.PreviousPressed = Input.Down.CurrentPressed;
@@ -6479,7 +6551,7 @@ main(int argc, char* argv[])
 		}
 
 		SDL_UpdateWindowSurface(Window);
-		SDL_QueueAudio(AudioDeviceID, (void*)SoundData, (u32)BytesToWrite);
+		//SDL_QueueAudio(AudioDeviceID, (void*)SoundData, (u32)BytesToWrite);
 
 		//SDL_Delay(1000);
 		u64 EndFrame = SDL_GetPerformanceCounter();
@@ -6491,7 +6563,7 @@ main(int argc, char* argv[])
 		++FPS;
 		if (SecondCounter >= 1.0f)
 		{
-			printf("\nFPS: %d",FPS);
+			//printf("\nFPS: %d",FPS);
 			SecondCounter -= 1.0f;
 			FPS = 0;
 		}
@@ -6502,7 +6574,8 @@ main(int argc, char* argv[])
 		//printf("FPS = %f\n", 1.0f / Input.dt);
 		BeginFrame = EndFrame;
 	}
-
+	fprintf(Log, "Exited Successfully");
+	fclose(Log);
 	SDL_DestroyWindow(Window);
 	SDL_Quit();
 	return 0;

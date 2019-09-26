@@ -3976,6 +3976,49 @@ ResetBlocks(game_state*GameState, block*Blocks, s32 NumBlocks)
 	}
 }
 
+
+internal void
+UpdateUndoStack(game_state* GameState, block* Blocks, s32 NumBlocks, undo_stack* UndoStack)
+{
+	s32 NumObjects = UndoStack->Words[UndoStack->NumWords - 1];
+	s32 NewDataStartIndex = UndoStack->NumWords - 1;
+	s32 CurrentStartIndex = NewDataStartIndex - 4 * NumObjects;
+	--UndoStack->NumWords;
+	for (s32 I = 0;
+		I < NumBlocks;
+		++I)
+	{
+		s32 UndoIndex = CurrentStartIndex + 4 * I;
+		s32 BlockIndex = UndoStack->Words[UndoIndex];
+		if (LengthSq(Blocks[I].Move) > 0 
+			|| AreAnyBitsSet(Blocks[I].Flags, CHANGING_TO_CHEBYSHEV | CHANGING_TO_METRICLESS))
+		{
+			b32 InCurrentData = false;
+			for (s32 J = CurrentStartIndex;
+				J < NewDataStartIndex;
+				J += 4)
+			{
+				if (UndoStack->Words[J] == I)
+				{
+					InCurrentData = true;
+					break;
+				}
+			}
+
+			if (!InCurrentData)
+			{
+				UndoStack->Words[UndoStack->NumWords++] = I;
+				UndoStack->Words[UndoStack->NumWords++] = Blocks[I].Pos.X;
+				UndoStack->Words[UndoStack->NumWords++] = Blocks[I].Pos.Y;
+				UndoStack->Words[UndoStack->NumWords++] = Blocks[I].Flags;
+				++NumObjects;
+			}
+		}
+	}
+
+	UndoStack->Words[UndoStack->NumWords++] = NumObjects;
+}
+
 internal void
 UndoTurn(game_state* GameState, block* Blocks, s32 NumBlocks, undo_stack* UndoStack)
 {
@@ -3996,7 +4039,7 @@ UndoTurn(game_state* GameState, block* Blocks, s32 NumBlocks, undo_stack* UndoSt
 	--UndoStack->NumEntries;
 	UndoStack->NumWords -= 4 * NumObjects + 1;
 
-
+	//TODO(ian): move this outside this function!!!
 	for (s32 I = 0;
 		I < MAX_TWEENS;
 		++I)
@@ -4760,7 +4803,7 @@ ExecuteTurn(game_state* GameState, s8*Level,i2 LevelSize, block* Blocks,s32 NumB
 		}
 		else
 		{
-			//UpdateUndoStack(GameState, Blocks, NumBlocks, &GameState->UndoStack);
+			UpdateUndoStack(GameState, Blocks, NumBlocks, &GameState->UndoStack);
 		}
 	}
 
@@ -5784,6 +5827,90 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"sx............................s"
 	"sssssssssssssssssssssssssssssss";
 
+
+
+
+	//NOTE(ian): it is possible to have the player be a block; this is a simple introduction to that
+	//see if player block levels actually lead to something
+	const char* Level =
+	"ssssssssssssssss"
+	"s..............s"
+	"s..............s"
+	"s..........P...s"
+	"s......B...B..Ps"
+	"s.......xxxxxxxs"
+	"s.......x......s"
+	"s.......x......s"
+	"s..P....x......s"
+	"sxxxxxxxx......s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"ssssssssssssssss";
+
+	const char* Level =
+	"ssssssssssssssss"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..........b...s"
+	"sxxxx.....xxxxxs"
+	"s..............s"
+	"s.....BBB......s"
+	"s.....BPB......s"
+	"s.....BBB......s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"ssssssssssssssss";
+
+
+
+	//NOTE(ian): this is a really interesting idea
+	//the usual: make sure it's not trivially solved
+	//also: try to find more with the player blocks
+	const char* Level =
+	"ssssssssssssssss"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s......P.......s"
+	"s.s....B...B.B.s"
+	"s.......B..xxxxs"
+	"sxxxxx...xxx...s"
+	"s....xxxxx.....s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"ssssssssssssssss";
+
+
+	//NOTE(ian): the power tower of player and chebyshev blocks
+	//see if there is anything interesting there
+	const char* Level =
+	"ssssssssssssssss"
+	"s..............s"
+	"s......P.......s"
+	"s......B.......s"
+	"s......P.......s"
+	"s......B.......s"
+	"s......P.......s"
+	"s......B.......s"
+	"sxxxxxxxxxxxxxxs"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"ssssssssssssssss";
 
 	const char* Level =
 	"ssssssssssssssss"

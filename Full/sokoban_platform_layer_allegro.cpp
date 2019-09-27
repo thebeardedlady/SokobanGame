@@ -3266,9 +3266,12 @@ void
 DrawRect(texture Window, r2 Screen,texture Texture)
 {
 	r2 TextureRect = RelativeRectTransformation(Screen, Texture.Rect, Window.Rect);
-	
+
+	ALLEGRO_COLOR PreMulColor = al_premul_rgba_f(Texture.Tint.r, Texture.Tint.g, Texture.Tint.b, Texture.Tint.a);
+
+
 	al_draw_tinted_scaled_rotated_bitmap_region(Texture.Bitmap, Texture.Region.X, Texture.Region.Y, Texture.Region.W, Texture.Region.H,
-		Texture.Tint, Texture.Center.X, Texture.Center.Y, Floor(TextureRect.X), Floor(TextureRect.Y), TextureRect.W / Texture.Region.W, TextureRect.H / Texture.Region.H, Texture.Angle, Texture.Flags);
+		PreMulColor, Texture.Center.X, Texture.Center.Y, TextureRect.X, TextureRect.Y, TextureRect.W / Texture.Region.W, TextureRect.H / Texture.Region.H, Texture.Angle, Texture.Flags);
 }
 
 
@@ -3355,6 +3358,7 @@ enum event_type {
 	MOVED_DIAGONALLY,
 	CRATE_CHANGED_STATE,
 	SINGLE_STEP_FALL,
+	INVISIBLE_HAPPENED,
 	UNDO_HAPPENED
 };
 
@@ -3374,8 +3378,8 @@ enum entity_flags {
 	PLAYER_FLAG = 32, //next 3 flags are types
 	CHEBYSHEV_FLAG = 64,
 	METRICLESS_FLAG = 128,
-	CRACKED_FLAG = 256, //next 3 flags are attributes
-	ALLOWED_DIAGONAL_FLAG = 512,
+	INVISIBLE_FLAG = 256, //next 3 flags are attributes
+	CHANGING_TO_INVISIBLE = 512,
 	DIAGONAL_ACTIVATED = 1024
 };
 
@@ -3763,6 +3767,7 @@ typedef struct {
 	stbte_tilemap* EditorTileMap;
 #endif
 	i2 PreviousMove;
+	v2 CameraPos;
 	s32 RecentEvent;
 	r32 AgainTime;
 	b32 InEditor;
@@ -3946,7 +3951,7 @@ PushOntoUndoStack(game_state* GameState, block* Blocks, s32 NumBlocks, undo_stac
 		I < NumBlocks;
 		++I)
 	{
-		if (LengthSq(Blocks[I].Move) > 0 || AreAnyBitsSet(Blocks[I].Flags,CHANGING_TO_CHEBYSHEV | CHANGING_TO_METRICLESS))
+		if (LengthSq(Blocks[I].Move) > 0 || AreAnyBitsSet(Blocks[I].Flags,CHANGING_TO_CHEBYSHEV | CHANGING_TO_METRICLESS | CHANGING_TO_INVISIBLE))
 		{
 			UndoStack->Words[UndoStack->NumWords++] = I;
 			UndoStack->Words[UndoStack->NumWords++] = Blocks[I].Pos.X;
@@ -3991,7 +3996,7 @@ UpdateUndoStack(game_state* GameState, block* Blocks, s32 NumBlocks, undo_stack*
 		s32 UndoIndex = CurrentStartIndex + 4 * I;
 		s32 BlockIndex = UndoStack->Words[UndoIndex];
 		if (LengthSq(Blocks[I].Move) > 0 
-			|| AreAnyBitsSet(Blocks[I].Flags, CHANGING_TO_CHEBYSHEV | CHANGING_TO_METRICLESS))
+			|| AreAnyBitsSet(Blocks[I].Flags, CHANGING_TO_CHEBYSHEV | CHANGING_TO_METRICLESS | CHANGING_TO_INVISIBLE))
 		{
 			b32 InCurrentData = false;
 			for (s32 J = CurrentStartIndex;
@@ -4292,13 +4297,15 @@ AreBlocksgFalling(game_state* GameState, s8*Level, i2 LevelSize, block* Blocks, 
 		{
 			if (Blocks[I].Pos.Y == Blocks[J].Pos.Y + 1 && Blocks[I].Pos.X == Blocks[J].Pos.X
 				&& (!AreBitsSet(Blocks[I].Flags, CHEBYSHEV_FLAG)
-				|| !AreBitsSet(Blocks[J].Flags, CHEBYSHEV_FLAG)))
+				|| !AreBitsSet(Blocks[J].Flags, CHEBYSHEV_FLAG)) && !AreBitsSet(Blocks[J].Flags,INVISIBLE_FLAG))
 			{
 				Blocks[I].Flags = SetBits(Blocks[I].Flags, SOMETHING_UNDERNEATH);
 			}
 		}
 	}
 
+
+	//NOTE(ian): perpetuate something underneath
 	s32 Indices[MAX_BLOCKS_PER_LEVEL];
 	s32 NumIndices = 0;
 	for (s32 I = 0;
@@ -4339,9 +4346,11 @@ AreBlocksgFalling(game_state* GameState, s8*Level, i2 LevelSize, block* Blocks, 
 
 
 
+
+
 //NOTE(ian): the 0 entry in the blocks array should always be the player!!!!
 internal b32
-SetUpPlayerMove(game_state* GameState, s8* Level, i2 LevelSize, block* Blocks, s32 NumBlocks, i2 Move, s32 Index)
+SetUpPlayerMove(game_state* GameState, s8* Level, i2 LevelSize, block* Blocks, s32 NumBlocks, i2 Move,s32 Index)
 {
 	b32 HasMoved = false;
 	i2 AdjacentPos = Blocks[Index].Pos + Move;
@@ -4351,7 +4360,7 @@ SetUpPlayerMove(game_state* GameState, s8* Level, i2 LevelSize, block* Blocks, s
 		I < NumBlocks;
 		++I)
 	{
-		if (Blocks[I].Pos == AdjacentPos)
+		if (Blocks[I].Pos == AdjacentPos && !AreBitsSet(Blocks[I].Flags,INVISIBLE_FLAG))
 		{
 			AdjacentBlockIndex = I;
 		}
@@ -4433,7 +4442,7 @@ SetUpPlayerMove(game_state* GameState, s8* Level, i2 LevelSize, block* Blocks, s
 };
 		*/
 	{
-		if (AreAnyBitsSet(Blocks[AdjacentBlockIndex].Flags, CHEBYSHEV_FLAG | METRICLESS_FLAG))
+		if (AreAnyBitsSet(Blocks[AdjacentBlockIndex].Flags, CHEBYSHEV_FLAG | METRICLESS_FLAG)) //| PLAYER_FLAG))
 		{
 			Blocks[AdjacentBlockIndex].Move = Move;
 			//Blocks[AdjacentBlockIndex].Flags = SetBits(Blocks[AdjacentBlockIndex].Flags, MOVING);
@@ -4471,10 +4480,34 @@ SetUpPlayerMove(game_state* GameState, s8* Level, i2 LevelSize, block* Blocks, s
 										Blocks[J].Move = Move;
 										PatternFound = true;
 									}
+									/*
+									else if (Blocks[I].Pos + Move == Blocks[J].Pos && AreBitsSet(Blocks[J].Flags, PLAYER_FLAG))
+									{
+										Blocks[J].Move = Move;
+										PatternFound = true;
+									}
+									*/
 								}
 							}
 						}
 						else if (AreBitsSet(Blocks[I].Flags, METRICLESS_FLAG))
+						{
+							for (s32 J = 0;
+								J < NumBlocks;
+								++J)
+							{
+								if (Blocks[I].Pos + Move == Blocks[J].Pos && LengthSq(Blocks[J].Move) == 0)
+								{
+									if (AreAnyBitsSet(Blocks[J].Flags, CHEBYSHEV_FLAG | METRICLESS_FLAG))// | PLAYER_FLAG))
+									{
+										Blocks[J].Move = Move;
+										PatternFound = true;
+									}
+								}
+							}
+						}
+						/*
+						else if (AreBitsSet(Blocks[I].Flags, PLAYER_FLAG))
 						{
 							for (s32 J = 0;
 								J < NumBlocks;
@@ -4490,6 +4523,7 @@ SetUpPlayerMove(game_state* GameState, s8* Level, i2 LevelSize, block* Blocks, s
 								}
 							}
 						}
+						*/
 					}
 
 				}
@@ -4539,6 +4573,10 @@ SetUpPlayerMove(game_state* GameState, s8* Level, i2 LevelSize, block* Blocks, s
 					}
 				}
 
+				
+				//TODO(ian): check whether allowing chebyshev and metricless blocks to push the player breaks or weakens puzzles!!!!!!
+				//NOTE(ian): if block tries to push player block
+				
 				if (AreAnyBitsSet(Blocks[I].Flags, CHEBYSHEV_FLAG | METRICLESS_FLAG))
 				{
 					for (s32 J = 0;
@@ -4546,13 +4584,15 @@ SetUpPlayerMove(game_state* GameState, s8* Level, i2 LevelSize, block* Blocks, s
 						++J)
 					{
 						if (Blocks[I].Pos + Blocks[I].Move == Blocks[J].Pos
-							&& AreBitsSet(Blocks[J].Flags, PLAYER_FLAG))
+							&& AreBitsSet(Blocks[J].Flags, PLAYER_FLAG) && !AreBitsSet(Blocks[J].Flags,INVISIBLE_FLAG))
 						{
 							Blocks[I].Move = i2{ 0,0 };
 						}
 					}
 
 				}
+				
+				
 			}
 
 
@@ -4613,8 +4653,79 @@ SetUpPlayerMove(game_state* GameState, s8* Level, i2 LevelSize, block* Blocks, s
 			HasMoved = (LengthSq(Blocks[AdjacentBlockIndex].Move) > 0);
 		}
 	}
+
+	/*
+	if (AreBitsSet(Blocks[0].Flags, INVISIBLE_FLAG))
+	{
+		HasMoved = false;
+	}
+	*/
+
 	return HasMoved;
 }
+
+
+
+internal b32
+ArePlayerBlocksDisappearing(game_state* GameState, s8* Level, i2 LevelSize, block* Blocks, s32 NumBlocks)
+{
+
+	for (s32 I = 0;
+		I < NumBlocks;
+		++I)
+	{
+		if (AreBitsSet(Blocks[I].Flags, PLAYER_FLAG))
+		{
+			Blocks[I].Flags = EraseBits(Blocks[I].Flags, CHANGING_TO_INVISIBLE);
+		}
+	}
+
+
+
+	b32 HasChanged = false;
+	for (s32 I = 0;
+		I < NumBlocks;
+		++I)
+	{
+		if (AreBitsSet(Blocks[I].Flags, PLAYER_FLAG))
+		{
+
+			b32 CanMove = false;
+			for (s32 A = 0;
+				A < CTAUINT;
+				A += 2)
+			{
+
+
+
+				i2 Move = CEuler(A);
+				if (SetUpPlayerMove(GameState, Level, LevelSize, Blocks, NumBlocks, Move, I))
+				{
+					CanMove = true;
+					break;
+				}
+			}
+
+			if (CanMove && AreBitsSet(Blocks[I].Flags,INVISIBLE_FLAG))
+			{
+				HasChanged = true;
+				//Blocks[I].Flags = EraseBits(Blocks[I].Flags, INVISIBLE_FLAG);
+				Blocks[I].Flags = SetBits(Blocks[I].Flags, CHANGING_TO_INVISIBLE);
+			}
+			else if (!CanMove && !AreBitsSet(Blocks[I].Flags, INVISIBLE_FLAG))
+			{
+				HasChanged = true;
+				//Blocks[I].Flags = SetBits(Blocks[I].Flags, INVISIBLE_FLAG);
+				Blocks[I].Flags = SetBits(Blocks[I].Flags, CHANGING_TO_INVISIBLE);
+			}
+
+
+		}
+	}
+
+	return HasChanged;
+}
+
 
 /*
 enum event_type {
@@ -4638,6 +4749,7 @@ PerformMove(game_state* GameState, block* Blocks, s32 NumBlocks, s32 Event)
 		{
 			if (AreBitsSet(Blocks[I].Flags, CHANGING_TO_CHEBYSHEV))
 			{
+				
 				Blocks[I].Flags = SetBits(Blocks[I].Flags, CHEBYSHEV_FLAG);
 				Blocks[I].Flags = EraseBits(Blocks[I].Flags, METRICLESS_FLAG);
 			}
@@ -4645,6 +4757,25 @@ PerformMove(game_state* GameState, block* Blocks, s32 NumBlocks, s32 Event)
 			{
 				Blocks[I].Flags = EraseBits(Blocks[I].Flags, CHEBYSHEV_FLAG);
 				Blocks[I].Flags = SetBits(Blocks[I].Flags, METRICLESS_FLAG);
+			}
+		}
+	}
+	else if(Event == INVISIBLE_HAPPENED)
+	{
+		for (s32 I = 0;
+			I < NumBlocks;
+			++I)
+		{
+			if (AreBitsSet(Blocks[I].Flags, CHANGING_TO_INVISIBLE))
+			{
+				if (AreBitsSet(Blocks[I].Flags, INVISIBLE_FLAG))
+				{
+					Blocks[I].Flags = EraseBits(Blocks[I].Flags, INVISIBLE_FLAG);
+				}
+				else
+				{
+					Blocks[I].Flags = SetBits(Blocks[I].Flags, INVISIBLE_FLAG);
+				}
 			}
 		}
 	}
@@ -4718,6 +4849,10 @@ ExecuteTurn(game_state* GameState, s8*Level,i2 LevelSize, block* Blocks,s32 NumB
 		Event = SINGLE_STEP_FALL;
 		Move = i2{ 0,-1 };
 	}
+	else if (ArePlayerBlocksDisappearing(GameState, Level, LevelSize, Blocks, NumBlocks))
+	{
+		Event = INVISIBLE_HAPPENED;
+	}
 	else
 	{
 		b32 HasPrimaryMove = (LengthSq(PrimaryMove) > 0);
@@ -4772,7 +4907,7 @@ ExecuteTurn(game_state* GameState, s8*Level,i2 LevelSize, block* Blocks,s32 NumB
 
 	if (Event != NO_EVENT)
 	{
-		if (Event == CRATE_CHANGED_STATE )
+		if (Event == CRATE_CHANGED_STATE || Event == INVISIBLE_HAPPENED)
 		{
 			PerformMove(GameState, Blocks, NumBlocks, Event);
 		}
@@ -4793,7 +4928,7 @@ ExecuteTurn(game_state* GameState, s8*Level,i2 LevelSize, block* Blocks,s32 NumB
 		
 		}
 
-		if (Event != SINGLE_STEP_FALL && Event != CRATE_CHANGED_STATE)
+		if (Event != SINGLE_STEP_FALL && Event != CRATE_CHANGED_STATE && Event != INVISIBLE_HAPPENED)
 		{
 			PushOntoUndoStack(GameState, Blocks, NumBlocks, &GameState->UndoStack);
 			if (Event == MOVED_DIAGONALLY)
@@ -4928,12 +5063,7 @@ s32 Flags;
 
 
 	al_clear_to_color(al_map_rgb(0,0,0));
-
 	
-	
-	
-
-	r32 RadiusSquared = 7.0f;
 
 	
 	
@@ -5019,6 +5149,18 @@ s32 Flags;
 			{
 				TextureIndex = PLAYER_TEXTURE;
 				
+				if (AreBitsSet(GameState->Level.Mutables[I].Flags, INVISIBLE_FLAG))
+				{
+					GameState->TextureGroup[TextureIndex].Tint = al_map_rgba_f(1.0f,1.0f,1.0f,0.5f);
+					//TextureIndex = BLANK_TEXTURE;
+				}
+				else
+				{
+					GameState->TextureGroup[TextureIndex].Tint = al_map_rgba_f(1.0f, 1.0f, 1.0f, 1.0f);
+
+				}
+				
+				
 			}
 				
 			if (TextureIndex != BLANK_TEXTURE)
@@ -5031,8 +5173,6 @@ s32 Flags;
 			}
 		}
 	}
-
-	
 
 	al_flip_display();
 }
@@ -5203,7 +5343,7 @@ GameUpdateAndRender(texture *Window, game_state *GameState, user_input *Input)
 			{
 				PerformMove(GameState, GameState->Level.Mutables, GameState->Level.NumMutables, GameState->RecentEvent);
 			}
-			GameState->RecentEvent = ExecuteTurn(GameState, GameState->Level.Immutables, GameState->Level.LevelSize, GameState->Level.Mutables, GameState->Level.NumMutables, Input->PrimaryInputtedMove, Input->SecondaryInputtedMove);
+			//GameState->RecentEvent = ExecuteTurn(GameState, GameState->Level.Immutables, GameState->Level.LevelSize, GameState->Level.Mutables, GameState->Level.NumMutables, Input->PrimaryInputtedMove, Input->SecondaryInputtedMove);
 			if (WaitTime > 0.0f)
 			{
 				GameState->AgainTime -= WaitTime;
@@ -5214,8 +5354,31 @@ GameUpdateAndRender(texture *Window, game_state *GameState, user_input *Input)
 			}
 		}
 
-		TweenAllObjects(GameState->Tweens, Input->dt);
 
+		//TODO(ian): this test proves that the flickering had to do with floating point rounding
+		//in terms of where the sprites were drawn; as such update the render code to use the allegro transforms instead of the regular stuff
+		TweenAllObjects(GameState->Tweens, Input->dt);
+		if (Input->Actions[UP].Pressed)
+		{
+			GameState->CameraPos.Y -= 1.0f;
+		}
+		if (Input->Actions[DOWN].Pressed)
+		{
+			GameState->CameraPos.Y += 1.0f;
+		}
+		if (Input->Actions[LEFT].Pressed)
+		{
+			GameState->CameraPos.X -= 1.0f;
+		}
+		if (Input->Actions[RIGHT].Pressed)
+		{
+			GameState->CameraPos.X += 1.0f;
+		}
+
+		ALLEGRO_TRANSFORM Transform;
+
+		al_build_transform(&Transform, GameState->CameraPos.X, GameState->CameraPos.Y, 1.0f, 1.0f, 0.0f);
+		al_use_transform(&Transform);
 
 		UpdateCamera(GameState);
 
@@ -5267,7 +5430,7 @@ InitializeGame(FILE* Log,game_state* GameState)
 			GameState->TextureGroup[SubTextures].Angle = 0.0f;
 			GameState->TextureGroup[SubTextures].Rect = r2{ 0.0f,0.0f,1.0f,1.0f };
 			GameState->TextureGroup[SubTextures].Center = v2{ 0.0f,0.0f };
-			GameState->TextureGroup[SubTextures].Region = r2{ (r32)X * 32.0f,(r32)Y*32.0f,32.0f,32.0f };
+			GameState->TextureGroup[SubTextures].Region = r2{ ((r32)X * 32.0f) + 0.5f,((r32)Y*32.0f) + 0.5f,32.0f,32.0f };
 			GameState->TextureGroup[SubTextures].Flags = 0;
 			GameState->TextureGroup[SubTextures].Offset = v2{ 0.0f,0.0f };
 			GameState->TextureGroup[SubTextures++].Tint = al_map_rgb(255, 255, 255);
@@ -5832,16 +5995,34 @@ InitializeGame(FILE* Log,game_state* GameState)
 
 	//NOTE(ian): it is possible to have the player be a block; this is a simple introduction to that
 	//see if player block levels actually lead to something
+	//NOTE(Ian): there are a lot of repetitions and duds here. try to salvage something
 	const char* Level =
 	"ssssssssssssssss"
 	"s..............s"
 	"s..............s"
-	"s..........P...s"
-	"s......B...B..Ps"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..P...........s"
+	"sxxxxx.xBxBxxxxs"
+	"s....x.....x...s"
+	"s....xxxxxxx...s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"ssssssssssssssss";
+
+	"ssssssssssssssss"
+	"s..............s"
+	"s..............s"
+	"s.....P........s"
+	"s......B......Ps"
 	"s.......xxxxxxxs"
 	"s.......x......s"
 	"s.......x......s"
-	"s..P....x......s"
+	"s.......x......s"
 	"sxxxxxxxx......s"
 	"s..............s"
 	"s..............s"
@@ -5849,6 +6030,24 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"s..............s"
 	"s..............s"
 	"ssssssssssssssss";
+
+	"ssssssssssssssss"
+	"s..............s"
+	"s..............s"
+	"s.....P........s"
+	"s......B..B...Ps"
+	"s.......xxxxxxxs"
+	"s.......x......s"
+	"s.......x......s"
+	"s.......x......s"
+	"sxxxx...x......s"
+	"s...xxxxx......s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"ssssssssssssssss";
+
 
 	const char* Level =
 	"ssssssssssssssss"
@@ -5911,6 +6110,29 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"s..............s"
 	"s..............s"
 	"ssssssssssssssss";
+
+	//NOTE(ian):idea for a puzzle: a puzzle where you need to drop a player block
+
+
+	const char* Level =
+	"ssssssssssssssss"
+	"s..........s..xs"
+	"ssssxxxxxxxx..xs"
+	"s.......B.....xs"
+	"s.......P.....xs"
+	"s.............xs"
+	"s.............xs"
+	"s.............xs"
+	"s.............xs"
+	"s..............s"
+	"sxxxxssssssxxxxs"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"ssssssssssssssss";
+
+
 
 	const char* Level =
 	"ssssssssssssssss"
@@ -6982,8 +7204,9 @@ main(int argc, char **argv)
 	ALLEGRO_DISPLAY *Display = NULL;
 
 	al_set_new_display_option(ALLEGRO_SAMPLE_BUFFERS, 1, ALLEGRO_REQUIRE);
-	al_set_new_display_option(ALLEGRO_DEPTH_SIZE, 16, ALLEGRO_REQUIRE);
-	al_set_new_display_option(ALLEGRO_SAMPLES, 16, ALLEGRO_REQUIRE);
+	al_set_new_display_option(ALLEGRO_SAMPLES, 2, ALLEGRO_REQUIRE);
+	//al_set_new_display_option(ALLEGRO_COLOR_SIZE, 32, ALLEGRO_REQUIRE);
+	//al_set_new_display_option(ALLEGRO_DEPTH_SIZE, 16, ALLEGRO_REQUIRE);
 	al_set_new_display_flags(ALLEGRO_WINDOWED);
 	al_set_new_window_title("Sokovania");
 

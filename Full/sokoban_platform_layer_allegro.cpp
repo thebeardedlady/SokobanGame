@@ -10,7 +10,7 @@
 
 
 
-#define FPS 30.0f
+#define FPS 60.0f
 #define local_persist static
 #define global_variable static
 #define internal static
@@ -2360,6 +2360,14 @@ GetCorners(b2 Box, i2 *Corners)
 }
 
 
+inline b32
+InsideBox(b2 Box, i2 A)
+{
+	b32 Result = (A.X >= Box.P.X && A.X < Box.P.X + Box.Size.X) &&
+		(A.Y >= Box.P.Y && A.Y < Box.P.Y + Box.Size.Y);
+	return Result;
+}
+
 ///////////////////////////////////////////
 
 
@@ -2922,7 +2930,7 @@ TweenOjbect(tween_object* Tween, r32 dt)
 		Result = false;
 	}
 
-	T *= Square(T);
+	//T *= Square(T);
 
 	if (Tween->Type == TYPE_NULL)
 	{
@@ -3232,6 +3240,8 @@ FreeChunk(void* Chunk)
 */
 
 
+#define GRID_PIXEL_LENGTH 32.0F
+
 
 typedef struct {
 	ALLEGRO_BITMAP* Bitmap;
@@ -3248,30 +3258,290 @@ typedef texture texture_group[50];
 
 #define NUM_TEXTURES 1
 
-enum bitmap_type {
-	ATLAS_TEXTURE,
-	METRICLESS_BLOCK_TEXTURE,
-	METRICLESS_WALL_TEXTURE,
-	BLANK_TEXTURE,
-	CHEBYSHEV_WALL_TEXTURE_OFF,
-	CHEBYSHEV_BLOCK_TEXTURE,
-	GRID_TEXTURE_A,
-	PLAYER_TEXTURE,
-	GRID_TEXTURE_B
+
+
+#define NUM_OBJECT_TYPES 13
+
+enum object_id {
+	ATLAS_ID,
+	METRICLESS_BLOCK_ID,
+	METRICLESS_WALL_ID,
+	CHEBYSHEV_WALL_ID,
+	CHEBYSHEV_BLOCK_ID,
+	BLANK_ID,
+	PLAYER_ID,
+	GRID_A_ID,
+	GRID_B_ID,
+	RECT_UP_LEFT_ID,
+	RECT_UP_RIGHT_ID,
+	RECT_DOWN_LEFT_ID,
+	RECT_DOWN_RIGHT_ID
+
 };
 
-//TODO(ian): look into deferred bitmap drawing
-
 void
-DrawRect(texture Window, r2 Screen,texture Texture)
+DrawRect(texture Texture)
 {
-	r2 TextureRect = RelativeRectTransformation(Screen, Texture.Rect, Window.Rect);
-
 	ALLEGRO_COLOR PreMulColor = al_premul_rgba_f(Texture.Tint.r, Texture.Tint.g, Texture.Tint.b, Texture.Tint.a);
 
-
 	al_draw_tinted_scaled_rotated_bitmap_region(Texture.Bitmap, Texture.Region.X, Texture.Region.Y, Texture.Region.W, Texture.Region.H,
-		PreMulColor, Texture.Center.X, Texture.Center.Y, TextureRect.X, TextureRect.Y, TextureRect.W / Texture.Region.W, TextureRect.H / Texture.Region.H, Texture.Angle, Texture.Flags);
+		PreMulColor, Texture.Center.X, Texture.Center.Y, (Texture.Rect.X+Texture.Offset.X)*GRID_PIXEL_LENGTH, (Texture.Rect.Y+Texture.Offset.Y)*GRID_PIXEL_LENGTH, 
+		Texture.Rect.W *GRID_PIXEL_LENGTH/ Texture.Region.W, Texture.Rect.H *GRID_PIXEL_LENGTH/ Texture.Region.H, Texture.Angle, Texture.Flags);
+}
+
+
+//NOTE(ian):
+//data for quad is laid out: 0) top left; 1) bottom left; 2) top right ; 3) bottom right
+
+
+void
+DrawQuad(v2* Vertices, v4 Color, texture Texture)
+{
+	ALLEGRO_VERTEX Quad[6];
+
+
+	v2 TransformedVertices[4];
+
+	for (s32 I = 0;
+		I < 4;
+		++I)
+	{
+		TransformedVertices[I] = Vertices[I] * 32.0f;
+	}
+
+
+	Quad[0].x = TransformedVertices[0].X;
+	Quad[0].y = TransformedVertices[0].Y;
+	Quad[0].z = 0.0f;
+	Quad[0].u = Texture.Region.X+0.5f;
+	Quad[0].v = Texture.Region.Y+0.5f;
+	Quad[0].color = al_map_rgba_f(Color.R,Color.G,Color.B,Color.A);
+
+	Quad[1].x = TransformedVertices[1].X;
+	Quad[1].y = TransformedVertices[1].Y;
+	Quad[1].z = 0.0f;
+	Quad[1].u = Texture.Region.X+0.5f;
+	Quad[1].v = Texture.Region.Y+Texture.Region.H+0.5f;
+	Quad[1].color = al_map_rgba_f(Color.R, Color.G, Color.B, Color.A);
+
+
+	Quad[2].x = TransformedVertices[3].X;
+	Quad[2].y = TransformedVertices[3].Y;
+	Quad[2].z = 0.0f;
+	Quad[2].u = Texture.Region.X + Texture.Region.W+0.5f;
+	Quad[2].v = Texture.Region.Y + Texture.Region.H + 0.5f;
+	Quad[2].color = al_map_rgba_f(Color.R, Color.G, Color.B, Color.A);
+
+
+	Quad[3].x = TransformedVertices[0].X;
+	Quad[3].y = TransformedVertices[0].Y;
+	Quad[3].z = 0.0f;
+	Quad[3].u = Texture.Region.X + 0.5f;
+	Quad[3].v = Texture.Region.Y + 0.5f;
+	Quad[3].color = al_map_rgba_f(Color.R, Color.G, Color.B, Color.A);
+
+	Quad[4].x = TransformedVertices[2].X;
+	Quad[4].y = TransformedVertices[2].Y;
+	Quad[4].z = 0.0f;
+	Quad[4].u = Texture.Region.X + Texture.Region.W+0.5f;
+	Quad[4].v = Texture.Region.Y + 0.5f;
+	Quad[4].color = al_map_rgba_f(Color.R, Color.G, Color.B, Color.A);
+
+
+	Quad[5].x = TransformedVertices[3].X;
+	Quad[5].y = TransformedVertices[3].Y;
+	Quad[5].z = 0.0f;
+	Quad[5].u = Texture.Region.X + Texture.Region.W + 0.5f;
+	Quad[5].v = Texture.Region.Y + Texture.Region.H + 0.5f;
+	Quad[5].color = al_map_rgba_f(Color.R, Color.G, Color.B, Color.A);
+
+	s32 NumDrawn = al_draw_prim(Quad, NULL, Texture.Bitmap, 0, 6, ALLEGRO_PRIM_TRIANGLE_FAN);
+
+	Assert(NumDrawn > 0);
+
+}
+
+internal void
+DrawSpecialQuad(texture* TextureGroup, r2 Screen, v2 LightP, r32 GameplayZ, r32 LightZ, r32 WallZ, s32 TextureIndex)
+{
+	v2 Vertices[4];
+	r2 Rect = TextureGroup[TextureIndex].Rect;
+
+	v2 GameplayPos = Rect.P;
+	r32 T = (WallZ - LightZ - (DistanceSq(GameplayPos, LightP) / GetArea(Screen))) / (GameplayZ - LightZ);
+	Vertices[0] = (GameplayPos - LightP) * T + LightP;
+
+	GameplayPos = Rect.P + V2(0.0f, Rect.H);
+	T = (WallZ - LightZ - (DistanceSq(GameplayPos, LightP) / GetArea(Screen))) / (GameplayZ - LightZ);
+	Vertices[1] = (GameplayPos - LightP) * T + LightP;
+
+	GameplayPos = Rect.P + V2(Rect.W, 0.0f);
+	T = (WallZ - LightZ - (DistanceSq(GameplayPos, LightP) / GetArea(Screen))) / (GameplayZ - LightZ);
+	Vertices[2] = (GameplayPos - LightP) * T + LightP;
+
+	GameplayPos = Rect.P + Rect.Size;
+	T = (WallZ - LightZ - (DistanceSq(GameplayPos, LightP) / GetArea(Screen))) / (GameplayZ - LightZ);
+	Vertices[3] = (GameplayPos - LightP) * T + LightP;
+
+
+	if (Vertices[0].X < Vertices[3].X && Vertices[0].Y < Vertices[3].Y
+		&& Vertices[1].X < Vertices[2].X && Vertices[1].Y > Vertices[2].Y)
+	{
+		DrawQuad(Vertices, v4{ 1.0f,1.0f,1.0f,1.0f }, TextureGroup[TextureIndex]);
+	}
+}
+
+
+internal void
+CreateCuboidFace(ALLEGRO_VERTEX *Face, v3 CuboidPos, v3 CuboidDim, s32 DiscardedFaceE, b32 FaceDimBool, v4 Color, texture Texture)
+{
+	s32 FaceE[2];
+	v3 CuboidFaceDim = CuboidDim;
+	if (DiscardedFaceE == 0)
+	{
+		FaceE[0] = 1;
+		FaceE[1] = 2;
+		CuboidFaceDim.E[0] = 0.0f;
+	}
+	else if (DiscardedFaceE == 1)
+	{
+		FaceE[0] = 0;
+		FaceE[1] = 2;
+		CuboidFaceDim.E[1] = 0.0f;
+	}
+	else
+	{
+		FaceE[0] = 0;
+		FaceE[1] = 1;
+		CuboidFaceDim.E[2] = 0.0f;
+	}
+
+	v3 CuboidFacePos = CuboidPos;
+
+	if (FaceDimBool)
+	{
+		CuboidFacePos.E[DiscardedFaceE] += CuboidDim.E[DiscardedFaceE];
+	}
+
+	v3 FacePoints[4];
+
+
+	for (s32 I = 0;
+		I < 2;
+		++I)
+	{
+		for (s32 J = 0;
+			J < 2;
+			++J)
+		{
+			FacePoints[I * 2 + J] = CuboidFacePos;
+			if (I > 0)
+			{
+				FacePoints[I * 2 + J].E[FaceE[0]] += CuboidFaceDim.E[FaceE[0]];
+			}
+			if (J > 0)
+			{
+				FacePoints[I * 2 + J].E[FaceE[1]] += CuboidFaceDim.E[FaceE[1]];
+			}
+		}
+	}
+
+
+	s32 VertexMap[] = { 0,3,1,1,4,4,2,5 };
+
+
+	for (s32 I = 0;
+		I < 2;
+		++I)
+	{
+		for (s32 J = 0;
+			J < 2;
+			++J)
+		{
+			for (s32 K = 0;
+				K < 2;
+				++K)
+			{
+				Face[VertexMap[I * 4 + J * 2 + K]].x = FacePoints[I * 2 + J].X;
+				Face[VertexMap[I * 4 + J * 2 + K]].y = FacePoints[I * 2 + J].Y;
+				Face[VertexMap[I * 4 + J * 2 + K]].z = FacePoints[I * 2 + J].Z;
+
+			}
+		}
+	}
+
+	Face[0].u = Texture.Region.X + 0.5f;
+	Face[0].v = Texture.Region.Y + 0.5f;
+	Face[0].color = al_map_rgba_f(Color.R, Color.G, Color.B, Color.A);
+
+	Face[1].u = Texture.Region.X + 0.5f;
+	Face[1].v = Texture.Region.Y + Texture.Region.H + 0.5f;
+	Face[1].color = al_map_rgba_f(Color.R, Color.G, Color.B, Color.A);
+
+
+	Face[2].u = Texture.Region.X + Texture.Region.W + 0.5f;
+	Face[2].v = Texture.Region.Y + Texture.Region.H + 0.5f;
+	Face[2].color = al_map_rgba_f(Color.R, Color.G, Color.B, Color.A);
+
+
+	Face[3].u = Texture.Region.X + 0.5f;
+	Face[3].v = Texture.Region.Y + 0.5f;
+	Face[3].color = al_map_rgba_f(Color.R, Color.G, Color.B, Color.A);
+
+	Face[4].u = Texture.Region.X + Texture.Region.W + 0.5f;
+	Face[4].v = Texture.Region.Y + 0.5f;
+	Face[4].color = al_map_rgba_f(Color.R, Color.G, Color.B, Color.A);
+
+
+	Face[5].u = Texture.Region.X + Texture.Region.W + 0.5f;
+	Face[5].v = Texture.Region.Y + Texture.Region.H + 0.5f;
+	Face[5].color = al_map_rgba_f(Color.R, Color.G, Color.B, Color.A);
+
+
+}
+
+internal void
+DrawCuboid(v3 CuboidPos, v3 CuboidDim, texture Texture)
+{
+	ALLEGRO_VERTEX Vertices[36];
+
+	for (s32 I = 0;
+		I < 3;
+		++I)
+	{
+		for (s32 J = 0;
+			J < 1;
+			++J)
+		{
+			CreateCuboidFace(&Vertices[(6 * (I * 2 + J))], CuboidPos, CuboidDim, I, J, v4{ 1.0f,1.0f,1.0f,1.0f }, Texture);
+		}
+	}
+
+
+
+
+
+	al_draw_prim(Vertices, NULL, Texture.Bitmap, 0, 18, ALLEGRO_PRIM_TRIANGLE_FAN);
+	al_draw_prim(Vertices, NULL, Texture.Bitmap, 18, 36, ALLEGRO_PRIM_TRIANGLE_FAN);
+	//al_draw_prim(Vertices, NULL, Texture.Bitmap, 12, 18, ALLEGRO_PRIM_TRIANGLE_LIST);
+	//al_draw_prim(Vertices, NULL, Texture.Bitmap, 18, 24, ALLEGRO_PRIM_TRIANGLE_LIST);
+	//al_draw_prim(Vertices, NULL, Texture.Bitmap, 24, 30, ALLEGRO_PRIM_TRIANGLE_LIST);
+	//al_draw_prim(Vertices, NULL, Texture.Bitmap, 30, 36, ALLEGRO_PRIM_TRIANGLE_LIST);
+
+	/*
+	for (s32 I = 0;
+	I < 12;
+	++I)
+	{
+	for (s32 J = 0;
+	J < 3;
+	++J)
+	{
+	al_draw_line(Vertices[I * 3 + J].x, Vertices[I * 3 + J].y, Vertices[I * 3 + ((J + 1) % 3)].x, Vertices[I * 3 + ((J + 1) % 3)].y, al_map_rgb_f(1, 1, 1), 2);
+	}
+	}
+	*/
+
 }
 
 
@@ -3423,22 +3693,9 @@ typedef struct {
 
 texture_group EditorTextures;
 
-#define GAME_ELEMENTS_LAYER_MASK 255
+#define GAME_ELEMENTS_LAYER_MASK 127
+#define PUZZLE_DATA_LAYER_MASK 128
 #define LEVEL_DATA_LAYER_MASK 256
-#define PLAYER_ID 1
-#define BLOCK_STARTING_ID 10
-#define NUM_BLOCK_TYPES 2
-#define MAX_BLOCK_TYPES	10
-#define CHEBYSHEV_WALL_STARTING_ID 25
-#define NUM_CHEBYSHEV_WALL_TILE_TYPES 1
-#define MAX_CHEBYSHEV_WALL_TYPES 10
-#define BACKGROUND_STARTING_ID 100
-#define NUM_BACKGROUND_TILE_TYPES 1
-#define MAX_BACKGROUND_TYPES 10
-#define LEVEL_DATA_STARTING_ID 150
-#define NUM_LEVEL_DATA_TILE_TYPES 5
-#define MAX_LEVEL_DATA_TYPES 10
-
 
 
 
@@ -3455,33 +3712,9 @@ EditorDrawTile(int x0, int y0, unsigned short id, int highlight, float *data)
 	//TODO(ian): once the editor is working, change this logic
 	s32 TextureIndex = EMPTY_TEXTURE;
 
-	if (id == PLAYER_ID)
+	if (id > 0 && id < 1000)
 	{
-		TextureIndex = PLAYER_TEXTURE_STATIONARY;
-	}
-	else if (id == BLOCK_STARTING_ID)
-	{
-		TextureIndex = METRICLESS_BLOCK_TEXTURE;
-	}
-	else if (id == BLOCK_STARTING_ID + 1)
-	{
-		TextureIndex = CHEBYSHEV_BLOCK_TEXTURE;
-	}
-	else if (id >= CHEBYSHEV_WALL_STARTING_ID && id < CHEBYSHEV_WALL_STARTING_ID + NUM_CHEBYSHEV_WALL_TILE_TYPES)
-	{
-		TextureIndex = CHEBYSHEV_WALL_TEXTURE_OFF;
-	}
-	else if (id >= BACKGROUND_STARTING_ID && id < BACKGROUND_STARTING_ID + NUM_BACKGROUND_TILE_TYPES)
-	{
-		TextureIndex = METRICLESS_WALL_TEXTURE;
-	}
-	else if (id == LEVEL_DATA_STARTING_ID)
-	{
-		TextureIndex = EMPTY_TEXTURE;
-	}
-	else if (id == LEVEL_DATA_STARTING_ID + 1)
-	{
-		TextureIndex = EMPTY_TEXTURE;
+		TextureIndex = id;
 	}
 
 
@@ -3759,6 +3992,7 @@ typedef struct {
 	level Level;
 	undo_stack UndoStack;
 	tween_object Tweens[MAX_TWEENS];
+	//ALLEGRO_VERTEX Quad[6];
 	r2 Screen;
 	texture Window;
 	texture_group TextureGroup;
@@ -4285,7 +4519,7 @@ AreBlocksgFalling(game_state* GameState, s8*Level, i2 LevelSize, block* Blocks, 
 		I < NumBlocks;
 		++I)
 	{
-		s8 Field = Level[(Blocks[I].Pos.Y - 1)*LevelSize.X + Blocks[I].Pos.X];
+		s8 Field = Level[(Blocks[I].Pos.Y + 1)*LevelSize.X + Blocks[I].Pos.X];
 		if (!IsEmpty(Field))
 		{
 			Blocks[I].Flags = SetBits(Blocks[I].Flags, SOMETHING_UNDERNEATH);
@@ -4295,9 +4529,9 @@ AreBlocksgFalling(game_state* GameState, s8*Level, i2 LevelSize, block* Blocks, 
 			J < NumBlocks;
 			++J)
 		{
-			if (Blocks[I].Pos.Y == Blocks[J].Pos.Y + 1 && Blocks[I].Pos.X == Blocks[J].Pos.X
-				&& (!AreBitsSet(Blocks[I].Flags, CHEBYSHEV_FLAG)
-				|| !AreBitsSet(Blocks[J].Flags, CHEBYSHEV_FLAG)) && !AreBitsSet(Blocks[J].Flags,INVISIBLE_FLAG))
+			if (Blocks[I].Pos.Y + 1 == Blocks[J].Pos.Y && Blocks[I].Pos.X == Blocks[J].Pos.X
+				&& (!AreBitsSet(Blocks[I].Flags, CHEBYSHEV_FLAG) || !AreBitsSet(Blocks[J].Flags, CHEBYSHEV_FLAG)))
+				//&& (!AreBitsSet(Blocks[J].Flags,INVISIBLE_FLAG) || AreBitsSet(Blocks[I].Flags, INVISIBLE_FLAG)))
 			{
 				Blocks[I].Flags = SetBits(Blocks[I].Flags, SOMETHING_UNDERNEATH);
 			}
@@ -4335,7 +4569,7 @@ AreBlocksgFalling(game_state* GameState, s8*Level, i2 LevelSize, block* Blocks, 
 	{
 		if (!AreAnyBitsSet(Blocks[I].Flags, SOMETHING_UNDERNEATH | CONNECTED_TO_CHEBYSHEV))
 		{
-			Blocks[I].Move = i2{ 0,-1 };
+			Blocks[I].Move = i2{ 0,1 };
 			Falling = true;
 		}
 	}
@@ -4360,7 +4594,7 @@ SetUpPlayerMove(game_state* GameState, s8* Level, i2 LevelSize, block* Blocks, s
 		I < NumBlocks;
 		++I)
 	{
-		if (Blocks[I].Pos == AdjacentPos && !AreBitsSet(Blocks[I].Flags,INVISIBLE_FLAG))
+		if (Blocks[I].Pos == AdjacentPos)// && !AreBitsSet(Blocks[I].Flags,INVISIBLE_FLAG))
 		{
 			AdjacentBlockIndex = I;
 		}
@@ -4369,6 +4603,22 @@ SetUpPlayerMove(game_state* GameState, s8* Level, i2 LevelSize, block* Blocks, s
 		//Blocks[I].Flags = EraseBits(Blocks[I].Flags, MOVING | STOPPED);
 	}
 
+	b32 MoreThanOneInGroup = false;
+	s32 GroupID = Blocks[Index].GroupID;
+
+	for (s32 I = 0;
+		I < NumBlocks;
+		++I)
+	{
+		if (Blocks[I].GroupID == GroupID && I != Index)
+		{
+			MoreThanOneInGroup = true;
+			break;
+		}
+
+	}
+
+
 	Blocks[Index].Move = Move;
 
 	s8 Field = Level[AdjacentIndex];
@@ -4376,6 +4626,221 @@ SetUpPlayerMove(game_state* GameState, s8* Level, i2 LevelSize, block* Blocks, s
 		|| IsChebyshevCrate(Field) || IsMetriclessCrate(Field)) //#1 Player against immutable part of level
 	{
 		HasMoved = false;
+	}
+	else if ((AdjacentBlockIndex != -1 && AreAnyBitsSet(Blocks[AdjacentBlockIndex].Flags, CHEBYSHEV_FLAG | METRICLESS_FLAG)) 
+		|| (Blocks[Index].GroupID != NULL_GROUP_ID && MoreThanOneInGroup)) // #5  player pushes block
+	{
+		Blocks[AdjacentBlockIndex].Move = Move;
+		//Blocks[AdjacentBlockIndex].Flags = SetBits(Blocks[AdjacentBlockIndex].Flags, MOVING);
+			
+
+		//NOTE(ian): perpetrate move
+		s32 Indices[MAX_BLOCKS_PER_LEVEL];
+		s32 NumIndices = 0;
+		s32 NumIterations = 0;
+		b32 PatternFound;
+		do {
+			PatternFound = false;
+			for (s32 I = 0;
+				I < NumBlocks;
+				++I)
+			{
+				if (LengthSq(Blocks[I].Move) > 0 && !AlreadyTagged(Indices,NumIndices,I))
+				{
+					Indices[NumIndices++] = I;
+					if (AreBitsSet(Blocks[I].Flags, CHEBYSHEV_FLAG))
+					{
+						for (s32 J = 0;
+							J < NumBlocks;
+							++J)
+						{
+							if (CDistance(Blocks[I].Pos, Blocks[J].Pos) == 1 && LengthSq(Blocks[J].Move) == 0)
+							{
+								if (AreBitsSet(Blocks[J].Flags, CHEBYSHEV_FLAG))
+								{
+									Blocks[J].Move = Move;
+									PatternFound = true;
+								}
+								else if (Blocks[I].Pos + Move == Blocks[J].Pos && AreBitsSet(Blocks[J].Flags, METRICLESS_FLAG))
+								{
+									Blocks[J].Move = Move;
+									PatternFound = true;
+								}
+								/*
+								else if (Blocks[I].Pos + Move == Blocks[J].Pos && AreBitsSet(Blocks[J].Flags, PLAYER_FLAG))
+								{
+									Blocks[J].Move = Move;
+									PatternFound = true;
+								}
+								*/
+							}
+						}
+					}
+					else if (AreBitsSet(Blocks[I].Flags, METRICLESS_FLAG))
+					{
+						for (s32 J = 0;
+							J < NumBlocks;
+							++J)
+						{
+							if (Blocks[I].Pos + Move == Blocks[J].Pos && LengthSq(Blocks[J].Move) == 0)
+							{
+								if (AreAnyBitsSet(Blocks[J].Flags, CHEBYSHEV_FLAG | METRICLESS_FLAG))// | PLAYER_FLAG))
+								{
+									Blocks[J].Move = Move;
+									PatternFound = true;
+								}
+							}
+						}
+					}
+					/*
+					else if (AreBitsSet(Blocks[I].Flags, PLAYER_FLAG))
+					{
+						for (s32 J = 0;
+							J < NumBlocks;
+							++J)
+						{
+							if (Blocks[I].Pos + Move == Blocks[J].Pos && LengthSq(Blocks[J].Move) == 0)
+							{
+								if (AreAnyBitsSet(Blocks[J].Flags, CHEBYSHEV_FLAG | METRICLESS_FLAG))
+								{
+									Blocks[J].Move = Move;
+									PatternFound = true;
+								}
+							}
+						}
+					}
+					*/
+				}
+
+			}
+			Assert(++NumIterations < 100);
+		} while (PatternFound);
+
+
+
+
+		//NOTE(ian): detect if stopped
+		for (s32 I = 0;
+			I < NumBlocks;
+			++I)
+		{
+			if (LengthSq(Blocks[I].Move) > 0 && AreAnyBitsSet(Blocks[I].Flags, CHEBYSHEV_FLAG | METRICLESS_FLAG))
+			{
+				s32 MovedIntoBlockIndex = (Blocks[I].Pos.Y + Move.Y)*LevelSize.X + (Blocks[I].Pos.X + Move.X);
+				if (IsChebyshevWall(Level[MovedIntoBlockIndex]) || IsMetriclessWall(Level[MovedIntoBlockIndex])
+					|| IsChebyshevCrate(Level[MovedIntoBlockIndex]) || IsMetriclessCrate(Level[MovedIntoBlockIndex]))
+				{
+					Blocks[I].Move = i2{ 0,0 };
+				}
+			}
+			if (AreBitsSet(Blocks[I].Flags, CHEBYSHEV_FLAG))
+			{
+				b32 NearImmovable = false;
+				for (s32 Y = -1;
+					Y < 2;
+					++Y)
+				{
+					for (s32 X = -1;
+						X < 2;
+						++X)
+					{
+						if (IsChebyshevCrate(Level[(Blocks[I].Pos.Y + Y)*LevelSize.X + (Blocks[I].Pos.X + X)]))
+						{
+							Blocks[I].Move = i2{ 0,0 };
+							NearImmovable = true;
+							break;
+						}
+					}
+					if (NearImmovable)
+					{
+						break;
+					}
+
+				}
+			}
+
+			//TODO(ian): get rid of invisible flag
+			//TODO(ian): check whether allowing chebyshev and metricless blocks to push the player breaks or weakens puzzles: answer it breaks a few
+			//NOTE(ian): if block tries to push player block
+			//TODO(ian): this rule is arbitrary and a relic of another version of the game; should i get rid of it in order to make the rules simpler? I'm thinking yes at the moment
+			
+			/*
+			if (AreAnyBitsSet(Blocks[I].Flags, CHEBYSHEV_FLAG | METRICLESS_FLAG))
+			{
+				for (s32 J = 0;
+					J < NumBlocks;
+					++J)
+				{
+					if (Blocks[I].Pos + Blocks[I].Move == Blocks[J].Pos
+						&& AreBitsSet(Blocks[J].Flags, PLAYER_FLAG))// && !AreBitsSet(Blocks[J].Flags,INVISIBLE_FLAG))
+					{
+						Blocks[I].Move = i2{ 0,0 };
+					}
+				}
+
+			}
+			*/
+			
+				
+				
+		}
+
+
+		//NOTE(ian): perpetrate stopped
+		NumIndices = 0;
+		do {
+			PatternFound = false;
+			for (s32 I = 0;
+				I < NumBlocks;
+				++I)
+			{
+				if (LengthSq(Blocks[I].Move) == 0 && !AlreadyTagged(Indices,NumIndices,I))
+				{
+					Indices[NumIndices++] = I;
+					if (AreBitsSet(Blocks[I].Flags, CHEBYSHEV_FLAG))
+					{
+						for (s32 J = 0;
+							J < NumBlocks;
+							++J)
+						{
+							if (CDistance(Blocks[I].Pos, Blocks[J].Pos) == 1 && LengthSq(Blocks[J].Move) > 0)
+							{
+								if (AreBitsSet(Blocks[J].Flags, CHEBYSHEV_FLAG))
+								{
+									Blocks[J].Move = i2{ 0,0 };
+									PatternFound = true;
+								}
+								else if (Blocks[I].Pos == Blocks[J].Pos + Move && AreBitsSet(Blocks[J].Flags, METRICLESS_FLAG))
+								{
+									Blocks[J].Move = i2{ 0,0 };
+									PatternFound = true;
+								}
+							}
+						}
+					}
+					else if (AreBitsSet(Blocks[I].Flags, METRICLESS_FLAG))
+					{
+						for (s32 J = 0;
+							J < NumBlocks;
+							++J)
+						{
+							if (Blocks[I].Pos == Blocks[J].Pos + Move && LengthSq(Blocks[J].Move) > 0)
+							{
+								if (AreAnyBitsSet(Blocks[J].Flags, CHEBYSHEV_FLAG | METRICLESS_FLAG))
+								{
+									Blocks[J].Move = i2{ 0,0 };
+									PatternFound = true;
+								}
+							}
+						}
+					}
+				}
+
+			}
+			Assert(++NumIterations < 100);
+		} while (PatternFound);
+
+		HasMoved = (LengthSq(Blocks[AdjacentBlockIndex].Move) > 0);
 	}
 	else if (IsEmpty(Field) && AdjacentBlockIndex == -1) // #2 Player againts empty square
 	{
@@ -4415,251 +4880,9 @@ SetUpPlayerMove(game_state* GameState, s8* Level, i2 LevelSize, block* Blocks, s
 				}
 			}
 		}
-		
+
 		HasMoved = IsSticky;
 	}
-	else if (AdjacentBlockIndex != -1) // #5  player pushes block
-
-		/*
-		enum entity_flags {
-	EMPTY_FLAG = 0,
-	CONNECTED_TO_CHEBYSHEV = 1, //first 6 are physics flags
-	SURROUNDED_BY_METRICLESS = 2,
-	SOMETHING_UNDERNEATH = 4,
-	FALLING = 8,
-	CHANGING_TO_CHEBYSHEV = 16,
-	CHANGING_TO_METRICLESS = 32,
-	MOVING
-	STOPPED
-	PLAYER_FLAG = 64, //next 7 flags are types
-	CHEBYSHEV_FLAG = 128,
-	METRICLESS_FLAG = 256,
-	SPECIAL_FLAG = 512,
-	SPECIAL_MAKER_FLAG = 1024,
-	HOLE_FLAG = 2048,
-	SWAPPER_FLAG = 4096,
-	DIAGONAL_MOVEMENT_ACTIVATED = 8192 //Is this needed?
-};
-		*/
-	{
-		if (AreAnyBitsSet(Blocks[AdjacentBlockIndex].Flags, CHEBYSHEV_FLAG | METRICLESS_FLAG)) //| PLAYER_FLAG))
-		{
-			Blocks[AdjacentBlockIndex].Move = Move;
-			//Blocks[AdjacentBlockIndex].Flags = SetBits(Blocks[AdjacentBlockIndex].Flags, MOVING);
-			
-
-			//NOTE(ian): perpetrate move
-			s32 Indices[MAX_BLOCKS_PER_LEVEL];
-			s32 NumIndices = 0;
-			s32 NumIterations = 0;
-			b32 PatternFound;
-			do {
-				PatternFound = false;
-				for (s32 I = 0;
-					I < NumBlocks;
-					++I)
-				{
-					if (LengthSq(Blocks[I].Move) > 0 && !AlreadyTagged(Indices,NumIndices,I))
-					{
-						Indices[NumIndices++] = I;
-						if (AreBitsSet(Blocks[I].Flags, CHEBYSHEV_FLAG))
-						{
-							for (s32 J = 0;
-								J < NumBlocks;
-								++J)
-							{
-								if (CDistance(Blocks[I].Pos, Blocks[J].Pos) == 1 && LengthSq(Blocks[J].Move) == 0)
-								{
-									if (AreBitsSet(Blocks[J].Flags, CHEBYSHEV_FLAG))
-									{
-										Blocks[J].Move = Move;
-										PatternFound = true;
-									}
-									else if (Blocks[I].Pos + Move == Blocks[J].Pos && AreBitsSet(Blocks[J].Flags, METRICLESS_FLAG))
-									{
-										Blocks[J].Move = Move;
-										PatternFound = true;
-									}
-									/*
-									else if (Blocks[I].Pos + Move == Blocks[J].Pos && AreBitsSet(Blocks[J].Flags, PLAYER_FLAG))
-									{
-										Blocks[J].Move = Move;
-										PatternFound = true;
-									}
-									*/
-								}
-							}
-						}
-						else if (AreBitsSet(Blocks[I].Flags, METRICLESS_FLAG))
-						{
-							for (s32 J = 0;
-								J < NumBlocks;
-								++J)
-							{
-								if (Blocks[I].Pos + Move == Blocks[J].Pos && LengthSq(Blocks[J].Move) == 0)
-								{
-									if (AreAnyBitsSet(Blocks[J].Flags, CHEBYSHEV_FLAG | METRICLESS_FLAG))// | PLAYER_FLAG))
-									{
-										Blocks[J].Move = Move;
-										PatternFound = true;
-									}
-								}
-							}
-						}
-						/*
-						else if (AreBitsSet(Blocks[I].Flags, PLAYER_FLAG))
-						{
-							for (s32 J = 0;
-								J < NumBlocks;
-								++J)
-							{
-								if (Blocks[I].Pos + Move == Blocks[J].Pos && LengthSq(Blocks[J].Move) == 0)
-								{
-									if (AreAnyBitsSet(Blocks[J].Flags, CHEBYSHEV_FLAG | METRICLESS_FLAG))
-									{
-										Blocks[J].Move = Move;
-										PatternFound = true;
-									}
-								}
-							}
-						}
-						*/
-					}
-
-				}
-				Assert(++NumIterations < 100);
-			} while (PatternFound);
-
-
-
-
-			//NOTE(ian): detect if stopped
-			for (s32 I = 0;
-				I < NumBlocks;
-				++I)
-			{
-				if (LengthSq(Blocks[I].Move) > 0 && AreAnyBitsSet(Blocks[I].Flags, CHEBYSHEV_FLAG | METRICLESS_FLAG))
-				{
-					s32 MovedIntoBlockIndex = (Blocks[I].Pos.Y + Move.Y)*LevelSize.X + (Blocks[I].Pos.X + Move.X);
-					if (IsChebyshevWall(Level[MovedIntoBlockIndex]) || IsMetriclessWall(Level[MovedIntoBlockIndex])
-						|| IsChebyshevCrate(Level[MovedIntoBlockIndex]) || IsMetriclessCrate(Level[MovedIntoBlockIndex]))
-					{
-						Blocks[I].Move = i2{ 0,0 };
-					}
-				}
-				if (AreBitsSet(Blocks[I].Flags, CHEBYSHEV_FLAG))
-				{
-					b32 NearImmovable = false;
-					for (s32 Y = -1;
-						Y < 2;
-						++Y)
-					{
-						for (s32 X = -1;
-							X < 2;
-							++X)
-						{
-							if (IsChebyshevCrate(Level[(Blocks[I].Pos.Y + Y)*LevelSize.X + (Blocks[I].Pos.X + X)]))
-							{
-								Blocks[I].Move = i2{ 0,0 };
-								NearImmovable = true;
-								break;
-							}
-						}
-						if (NearImmovable)
-						{
-							break;
-						}
-
-					}
-				}
-
-				
-				//TODO(ian): check whether allowing chebyshev and metricless blocks to push the player breaks or weakens puzzles!!!!!!
-				//NOTE(ian): if block tries to push player block
-				
-				if (AreAnyBitsSet(Blocks[I].Flags, CHEBYSHEV_FLAG | METRICLESS_FLAG))
-				{
-					for (s32 J = 0;
-						J < NumBlocks;
-						++J)
-					{
-						if (Blocks[I].Pos + Blocks[I].Move == Blocks[J].Pos
-							&& AreBitsSet(Blocks[J].Flags, PLAYER_FLAG) && !AreBitsSet(Blocks[J].Flags,INVISIBLE_FLAG))
-						{
-							Blocks[I].Move = i2{ 0,0 };
-						}
-					}
-
-				}
-				
-				
-			}
-
-
-			//NOTE(ian): perpetrate stopped
-			NumIndices = 0;
-			do {
-				PatternFound = false;
-				for (s32 I = 0;
-					I < NumBlocks;
-					++I)
-				{
-					if (LengthSq(Blocks[I].Move) == 0 && !AlreadyTagged(Indices,NumIndices,I))
-					{
-						Indices[NumIndices++] = I;
-						if (AreBitsSet(Blocks[I].Flags, CHEBYSHEV_FLAG))
-						{
-							for (s32 J = 0;
-								J < NumBlocks;
-								++J)
-							{
-								if (CDistance(Blocks[I].Pos, Blocks[J].Pos) == 1 && LengthSq(Blocks[J].Move) > 0)
-								{
-									if (AreBitsSet(Blocks[J].Flags, CHEBYSHEV_FLAG))
-									{
-										Blocks[J].Move = i2{ 0,0 };
-										PatternFound = true;
-									}
-									else if (Blocks[I].Pos == Blocks[J].Pos + Move && AreBitsSet(Blocks[J].Flags, METRICLESS_FLAG))
-									{
-										Blocks[J].Move = i2{ 0,0 };
-										PatternFound = true;
-									}
-								}
-							}
-						}
-						else if (AreBitsSet(Blocks[I].Flags, METRICLESS_FLAG))
-						{
-							for (s32 J = 0;
-								J < NumBlocks;
-								++J)
-							{
-								if (Blocks[I].Pos == Blocks[J].Pos + Move && LengthSq(Blocks[J].Move) > 0)
-								{
-									if (AreAnyBitsSet(Blocks[J].Flags, CHEBYSHEV_FLAG | METRICLESS_FLAG))
-									{
-										Blocks[J].Move = i2{ 0,0 };
-										PatternFound = true;
-									}
-								}
-							}
-						}
-					}
-
-				}
-				Assert(++NumIterations < 100);
-			} while (PatternFound);
-
-			HasMoved = (LengthSq(Blocks[AdjacentBlockIndex].Move) > 0);
-		}
-	}
-
-	/*
-	if (AreBitsSet(Blocks[0].Flags, INVISIBLE_FLAG))
-	{
-		HasMoved = false;
-	}
-	*/
 
 	return HasMoved;
 }
@@ -4821,6 +5044,10 @@ GetEventWaitTime(u32 Event)
 	{
 		Result = 2.0f / 60.0f;
 	}
+	else if (Event == INVISIBLE_HAPPENED)
+	{
+		Result = 8.0f / 60.0f;
+	}
 
 	return Result;
 }
@@ -4849,10 +5076,12 @@ ExecuteTurn(game_state* GameState, s8*Level,i2 LevelSize, block* Blocks,s32 NumB
 		Event = SINGLE_STEP_FALL;
 		Move = i2{ 0,-1 };
 	}
+	/*
 	else if (ArePlayerBlocksDisappearing(GameState, Level, LevelSize, Blocks, NumBlocks))
 	{
 		Event = INVISIBLE_HAPPENED;
 	}
+	*/
 	else
 	{
 		b32 HasPrimaryMove = (LengthSq(PrimaryMove) > 0);
@@ -4907,38 +5136,37 @@ ExecuteTurn(game_state* GameState, s8*Level,i2 LevelSize, block* Blocks,s32 NumB
 
 	if (Event != NO_EVENT)
 	{
-		if (Event == CRATE_CHANGED_STATE || Event == INVISIBLE_HAPPENED)
+		if (Event != SINGLE_STEP_FALL && Event != CRATE_CHANGED_STATE && Event != INVISIBLE_HAPPENED)
+		{
+			PushOntoUndoStack(GameState, Blocks, NumBlocks, &GameState->UndoStack);
+		}
+		else
+		{
+			UpdateUndoStack(GameState, Blocks, NumBlocks, &GameState->UndoStack);
+		}
+
+
+
+		if (Event == CRATE_CHANGED_STATE || Event == INVISIBLE_HAPPENED || Event == MOVED_DIAGONALLY)
 		{
 			PerformMove(GameState, Blocks, NumBlocks, Event);
 		}
 		else
 		{
-			if (Event != MOVED_DIAGONALLY)
+			//PerformMove(GameState, Blocks, NumBlocks, Event);
+			
+			for (s32 I = 0;
+				I < NumBlocks;
+				++I)
 			{
-				for (s32 I = 0;
-					I < NumBlocks;
-					++I)
+				if (LengthSq(Blocks[I].Move) > 0)
 				{
-					if (LengthSq(Blocks[I].Move) > 0)
-					{
-						AddTweenV2(GameState->Tweens, &Blocks[I].Rect.P, V2(Blocks[I].Pos), GetEventWaitTime(Event), V2(Blocks[I].Pos + Blocks[I].Move));
-					}
+					AddTweenV2(GameState->Tweens, &Blocks[I].Rect.P, V2(Blocks[I].Pos), 
+						GetEventWaitTime(Event), V2(Blocks[I].Pos + Blocks[I].Move));
 				}
 			}
+			
 		
-		}
-
-		if (Event != SINGLE_STEP_FALL && Event != CRATE_CHANGED_STATE && Event != INVISIBLE_HAPPENED)
-		{
-			PushOntoUndoStack(GameState, Blocks, NumBlocks, &GameState->UndoStack);
-			if (Event == MOVED_DIAGONALLY)
-			{
-				PerformMove(GameState, Blocks, NumBlocks, Event);
-			}
-		}
-		else
-		{
-			UpdateUndoStack(GameState, Blocks, NumBlocks, &GameState->UndoStack);
 		}
 	}
 
@@ -4963,7 +5191,7 @@ UpdateCamera(game_state* GameState)
 	r2 LevelRect = R2(i2{ 0,0 }, GameState->Level.LevelSize);
 	LevelRect.Size = LevelRect.Size - GameState->Screen.Size;
 	//NOTE(ian): this is for the newline characters at the right side of the level
-	LevelRect.Size.X -= 1;
+	LevelRect.Size.X -= 1.0f;
 
 	for (s32 BitMask = 3;
 		BitMask >= 0;
@@ -5024,18 +5252,30 @@ UpdateCamera(game_state* GameState)
 }
 
 
+
+
 internal void
 Render(texture *Window, game_state* GameState)
 {
 
 
+
 	b2 CameraBox = B2(GameState->Screen);
 
+
+	CameraBox.Size = CameraBox.Size + I2(32, 18);
+	CameraBox.P = CameraBox.P - I2(32, 18);
+
+	
 	CameraBox.X = Max(0, CameraBox.X-2);
 	CameraBox.Y = Max(0, CameraBox.Y-2);
 	CameraBox.W = Min(CameraBox.W+4,GameState->Level.LevelSize.X-CameraBox.X);
 	CameraBox.H = Min(CameraBox.H+4,GameState->Level.LevelSize.Y-CameraBox.Y);
 
+	/*
+	ALLEGRO_TRANSFORM Transform;
+
+	
 
 	/*
 	enum bitmap_type {
@@ -5058,77 +5298,57 @@ s32 Flags;
 }texture;
 	*/
 
+	
+	al_clear_to_color(al_map_rgb_f(0,0,0));
+	//al_clear_depth_buffer(1);
 
 
-
-
-	al_clear_to_color(al_map_rgb(0,0,0));
+	ALLEGRO_TRANSFORM Transform;
+	v2 TempScale = v2{ 1.0f,1.0f };
+	al_build_transform(&Transform, -GameState->Screen.X*32.0f, -GameState->Screen.Y*32.0f, TempScale.X, TempScale.Y, 0.0f);
+	al_use_transform(&Transform);
+	
+	
+	al_hold_bitmap_drawing(true);
+	
 	
 
 	
-	
-	for (s32 Y = CameraBox.Y;
-		Y < CameraBox.Y + CameraBox.H;
-		++Y)
-	{
-		for (s32 X = CameraBox.X;
-			X < CameraBox.X + CameraBox.W;
-			++X)
-		{
-			s32 TextureIndex;
-			if (((X + Y) & 1) == 0)
-			{
-				TextureIndex = GRID_TEXTURE_A;
-			}
-			else
-			{
-				TextureIndex = GRID_TEXTURE_B;
-			}
 
-			GameState->TextureGroup[TextureIndex].Rect.P = V2(X, Y);
-			GameState->TextureGroup[TextureIndex].Rect.Y = VerticalFlip(R2(GameState->TextureGroup[TextureIndex].Rect.P, v2{ 1.0f,1.0f }), GameState->Screen.Y + GameState->Screen.H*0.5f);
-
-			DrawRect(GameState->Window, GameState->Screen, GameState->TextureGroup[TextureIndex]);
-		}
-	}
-
-	
-
-	for (s32 Y = CameraBox.Y;
-		Y < CameraBox.Y + CameraBox.H;
-		++Y)
+	for (s32 Y = CameraBox.Y + CameraBox.H - 1;
+		Y >= CameraBox.Y;
+		--Y)
 	{
 		for (s32 X = CameraBox.X;
 			X < CameraBox.X + CameraBox.W;
 			++X)
 		{
 			s8 Field = GameState->Level.Immutables[Y*GameState->Level.LevelSize.X + X];
-			s32 TextureIndex = BLANK_TEXTURE;
+			s32 TextureIndex = BLANK_ID;
 			if (IsChebyshevWall(Field))
 			{
-				TextureIndex = CHEBYSHEV_WALL_TEXTURE_OFF;
+				TextureIndex = CHEBYSHEV_WALL_ID;
 				
 			}
 			else if (IsMetriclessWall(Field))
 			{
-				TextureIndex = METRICLESS_WALL_TEXTURE;
+				TextureIndex = METRICLESS_WALL_ID;
+				
 			}
 
-			if (TextureIndex != BLANK_TEXTURE)
+			GameState->TextureGroup[TextureIndex].Rect.P = V2(X, Y);
+			if (TextureIndex == BLANK_ID)
 			{
-				GameState->TextureGroup[TextureIndex].Rect.P = V2(X, Y);
-				GameState->TextureGroup[TextureIndex].Rect.Y = VerticalFlip(R2(GameState->TextureGroup[TextureIndex].Rect.P, v2{ 1.0f,1.0f }), GameState->Screen.Y + GameState->Screen.H*0.5f);
+				r32 Dist = TDistance(GameState->TextureGroup[TextureIndex].Rect.P, RectCenter(GameState->Screen)) / 20.0f;
+				Dist = 1.0f - Dist;
+				Dist *= Dist;
 
-				DrawRect(GameState->Window, GameState->Screen, GameState->TextureGroup[TextureIndex]);
+				GameState->TextureGroup[TextureIndex].Tint = al_map_rgba_f(1, 1, 1, Dist);
 			}
+			
+			DrawRect(GameState->TextureGroup[TextureIndex]);
 		}
 	}
-
-	
-
-
-	
-
 
 	for (s32 I = 0;
 		I < GameState->Level.NumMutables;
@@ -5136,45 +5356,55 @@ s32 Flags;
 	{
 		if (Intersects(CameraBox, B2(GameState->Level.Mutables[I].Pos, i2{ 1,1 })))
 		{
-			s32 TextureIndex = BLANK_TEXTURE;
+			s32 TextureIndex = BLANK_ID;
 			if (AreBitsSet(GameState->Level.Mutables[I].Flags, CHEBYSHEV_FLAG))
 			{
-				TextureIndex = CHEBYSHEV_BLOCK_TEXTURE;
+				TextureIndex = CHEBYSHEV_BLOCK_ID;
 			}
 			else if (AreBitsSet(GameState->Level.Mutables[I].Flags, METRICLESS_FLAG))
 			{
-				TextureIndex = METRICLESS_BLOCK_TEXTURE;
+				TextureIndex = METRICLESS_BLOCK_ID;
 			}
 			else if (AreBitsSet(GameState->Level.Mutables[I].Flags, PLAYER_FLAG))
 			{
-				TextureIndex = PLAYER_TEXTURE;
-				
-				if (AreBitsSet(GameState->Level.Mutables[I].Flags, INVISIBLE_FLAG))
-				{
-					GameState->TextureGroup[TextureIndex].Tint = al_map_rgba_f(1.0f,1.0f,1.0f,0.5f);
-					//TextureIndex = BLANK_TEXTURE;
-				}
-				else
-				{
-					GameState->TextureGroup[TextureIndex].Tint = al_map_rgba_f(1.0f, 1.0f, 1.0f, 1.0f);
-
-				}
-				
-				
+				TextureIndex = PLAYER_ID;
 			}
 				
-			if (TextureIndex != BLANK_TEXTURE)
+			if (TextureIndex != BLANK_ID)
 			{
 				GameState->TextureGroup[TextureIndex].Rect.P = GameState->Level.Mutables[I].Rect.P;
 
-				GameState->TextureGroup[TextureIndex].Rect.Y = VerticalFlip(R2(GameState->TextureGroup[TextureIndex].Rect.P, v2{ 1.0f,1.0f }), GameState->Screen.Y + GameState->Screen.H*0.5f);
+				//GameState->TextureGroup[TextureIndex].Rect.Y = VerticalFlip(R2(GameState->TextureGroup[TextureIndex].Rect.P, v2{ 1.0f,1.0f }), GameState->Screen.Y + GameState->Screen.H*0.5f);
 
-				DrawRect(GameState->Window, GameState->Screen, GameState->TextureGroup[TextureIndex]);
+				DrawRect(GameState->TextureGroup[TextureIndex]);
+				//DrawSpecialQuad(GameState, R2(CameraBox), LightP, GameplayZ, LightZ, WallZ, TextureIndex);
 			}
 		}
 	}
 
+	al_hold_bitmap_drawing(false);
+
+
 	al_flip_display();
+
+	/*
+	al_identity_transform(&Transform);
+
+	r32 ZValue = GameState->Window.Rect.W*0.5f / Tangent(TAU32 / 8.0f);
+
+	al_perspective_transform(&Transform, 0.0f, 0.0f, ZValue, GameState->Window.Rect.W, GameState->Window.Rect.H, 2000.0f);
+	//al_perspective_transform(&Transform, 0.0f, 0.0f, ZValue, 800, 450, 2000);
+	al_use_projection_transform(&Transform);
+
+	ALLEGRO_TRANSFORM Camera;
+	al_build_camera_transform(&Camera, -GameState->Screen.X, -GameState->Screen.Y, ZValue, 0, 0, 0, 0, 1, 0);
+	al_use_transform(&Camera);
+
+
+	DrawCuboid(GameState, GameState->Screen, v3{ 100,100,0 }, v3{ 100,100,-100 }, GameState->TextureGroup[METRICLESS_BLOCK_ID]);
+	DrawCuboid(GameState, GameState->Screen, v3{ 200,200,0 }, v3{ 200,200,-200 }, GameState->TextureGroup[METRICLESS_BLOCK_ID]);
+	*/
+	
 }
 
 
@@ -5210,16 +5440,22 @@ GameUpdateAndRender(texture *Window, game_state *GameState, user_input *Input)
 		{
 			if (Input->Actions[I].Pressed)
 			{
-				Pressed.Move = Pressed.Move + CEuler(I);
+				i2 InputtedMove = CEuler(I);
+				InputtedMove.Y *= -1;
+				Pressed.Move = Pressed.Move + InputtedMove;
 				++Pressed.Num;
 				if (Input->Actions[I].JustPressed)
 				{
-					JustPressed.Move = JustPressed.Move + CEuler(I);
+					i2 InputtedMove = CEuler(I);
+					InputtedMove.Y *= -1;
+					JustPressed.Move = JustPressed.Move + InputtedMove;
 					++JustPressed.Num;
 				}
 				else
 				{
-					Held.Move = Held.Move + CEuler(I);
+					i2 InputtedMove = CEuler(I);
+					InputtedMove.Y *= -1;
+					Held.Move = Held.Move + InputtedMove;
 					++Held.Num;
 				}
 			}
@@ -5247,8 +5483,8 @@ GameUpdateAndRender(texture *Window, game_state *GameState, user_input *Input)
 			}
 			else if (JustPressed.Num == 1 && Held.Num == 1)
 			{
-				Input->PrimaryInputtedMove = Held.Move;
-				Input->SecondaryInputtedMove = JustPressed.Move;
+				Input->PrimaryInputtedMove = JustPressed.Move;
+				Input->SecondaryInputtedMove = Held.Move;
 			}
 			else if (JustPressed.Num == 0 && Held.Num == 2)
 			{
@@ -5263,14 +5499,22 @@ GameUpdateAndRender(texture *Window, game_state *GameState, user_input *Input)
 						{
 							MaxTime = Input->Actions[I].Time;
 							Input->SecondaryInputtedMove = Input->PrimaryInputtedMove;
-							Input->PrimaryInputtedMove = CEuler(I);
+							i2 InputtedMove = CEuler(I);
+							InputtedMove.Y *= -1;
+							Input->PrimaryInputtedMove = InputtedMove;
 						}
 						else if (Input->Actions[I].Time > 0.0f)
 						{
-							Input->SecondaryInputtedMove = CEuler(I);
+							i2 InputtedMove = CEuler(I);
+							InputtedMove.Y *= -1;
+							Input->SecondaryInputtedMove = InputtedMove;
 						}
 					}
 				}
+
+				i2 Temp = Input->PrimaryInputtedMove;
+				Input->PrimaryInputtedMove = Input->SecondaryInputtedMove;
+				Input->SecondaryInputtedMove = Temp;
 			}
 			else if (JustPressed.Num == 2 && Held.Num == 0)
 			{
@@ -5283,12 +5527,16 @@ GameUpdateAndRender(texture *Window, game_state *GameState, user_input *Input)
 					{
 						if (!HaveChosenInput)
 						{
-							Input->PrimaryInputtedMove = CEuler(I);
+							i2 InputtedMove = CEuler(I);
+							InputtedMove.Y *= -1;
+							Input->PrimaryInputtedMove = InputtedMove;
 							HaveChosenInput = true;
 						}
 						else
 						{
-							Input->SecondaryInputtedMove = CEuler(I);
+							i2 InputtedMove = CEuler(I);
+							InputtedMove.Y *= -1;
+							Input->SecondaryInputtedMove = InputtedMove;
 						}
 					}
 				}
@@ -5312,7 +5560,6 @@ GameUpdateAndRender(texture *Window, game_state *GameState, user_input *Input)
 			{
 				GameState->UndoStack.UndoCount = 1;
 				UndoTurn(GameState, GameState->Level.Mutables, GameState->Level.NumMutables, &GameState->UndoStack);
-
 			}
 			else if (Input->Actions[UNDO].Pressed)
 			{
@@ -5343,7 +5590,7 @@ GameUpdateAndRender(texture *Window, game_state *GameState, user_input *Input)
 			{
 				PerformMove(GameState, GameState->Level.Mutables, GameState->Level.NumMutables, GameState->RecentEvent);
 			}
-			//GameState->RecentEvent = ExecuteTurn(GameState, GameState->Level.Immutables, GameState->Level.LevelSize, GameState->Level.Mutables, GameState->Level.NumMutables, Input->PrimaryInputtedMove, Input->SecondaryInputtedMove);
+			GameState->RecentEvent = ExecuteTurn(GameState, GameState->Level.Immutables, GameState->Level.LevelSize, GameState->Level.Mutables, GameState->Level.NumMutables, Input->PrimaryInputtedMove, Input->SecondaryInputtedMove);
 			if (WaitTime > 0.0f)
 			{
 				GameState->AgainTime -= WaitTime;
@@ -5354,10 +5601,9 @@ GameUpdateAndRender(texture *Window, game_state *GameState, user_input *Input)
 			}
 		}
 
-
-		//TODO(ian): this test proves that the flickering had to do with floating point rounding
-		//in terms of where the sprites were drawn; as such update the render code to use the allegro transforms instead of the regular stuff
 		TweenAllObjects(GameState->Tweens, Input->dt);
+
+		/*
 		if (Input->Actions[UP].Pressed)
 		{
 			GameState->CameraPos.Y -= 1.0f;
@@ -5374,11 +5620,13 @@ GameUpdateAndRender(texture *Window, game_state *GameState, user_input *Input)
 		{
 			GameState->CameraPos.X += 1.0f;
 		}
+		
 
 		ALLEGRO_TRANSFORM Transform;
 
 		al_build_transform(&Transform, GameState->CameraPos.X, GameState->CameraPos.Y, 1.0f, 1.0f, 0.0f);
 		al_use_transform(&Transform);
+		*/
 
 		UpdateCamera(GameState);
 
@@ -5387,13 +5635,10 @@ GameUpdateAndRender(texture *Window, game_state *GameState, user_input *Input)
 
 }
 
-
-//TODO(ian): experiment with invivisible blocks
-
 s32
 InitializeGame(FILE* Log,game_state* GameState)
 {
-	GameState->Screen = R2(v2{ 0.0f,0.0f }, v2{ 32.0f,18.0f });;
+	GameState->Screen = R2(v2{ 0.0f,0.0f }, HadamardDiv(GameState->Window.Rect.Size, v2{ GRID_PIXEL_LENGTH,GRID_PIXEL_LENGTH }));;
 	GameState->AgainTime = 0.0f;
 	Seed(&GameState->PRNG, 100);
 	GameState->InEditor = false;
@@ -5402,7 +5647,7 @@ InitializeGame(FILE* Log,game_state* GameState)
 	fprintf(Log, "\nLoading Textures...");
 
 
-	const char* ArtAsset[NUM_TEXTURES] = { "art\\sokovaniablocks.png" };
+	const char* ArtAsset[NUM_TEXTURES] = { "art\\sokovaniablocks5.png" };
 
 
 	for (s32 I = 0;
@@ -5423,36 +5668,30 @@ InitializeGame(FILE* Log,game_state* GameState)
 		++Y)
 	{
 		for (s32 X = 0;
-			X < 4;
+			X < 3;
 			++X)
 		{
-			GameState->TextureGroup[SubTextures].Bitmap = GameState->TextureGroup[ATLAS_TEXTURE].Bitmap;
+			GameState->TextureGroup[SubTextures].Bitmap = GameState->TextureGroup[ATLAS_ID].Bitmap;
 			GameState->TextureGroup[SubTextures].Angle = 0.0f;
-			GameState->TextureGroup[SubTextures].Rect = r2{ 0.0f,0.0f,1.0f,1.0f };
 			GameState->TextureGroup[SubTextures].Center = v2{ 0.0f,0.0f };
-			GameState->TextureGroup[SubTextures].Region = r2{ ((r32)X * 32.0f) + 0.5f,((r32)Y*32.0f) + 0.5f,32.0f,32.0f };
+			GameState->TextureGroup[SubTextures].Region = r2{ ((r32)X * 34.0f+1.0f),((r32)Y*34.0f+1.0f),32.0f,32.0f };
+			GameState->TextureGroup[SubTextures].Rect = r2{ v2{0.0f,0.0f},HadamardDiv(GameState->TextureGroup[SubTextures].Region.Size,v2{GRID_PIXEL_LENGTH,GRID_PIXEL_LENGTH})+ V2(2.0f / GRID_PIXEL_LENGTH,2.0F / GRID_PIXEL_LENGTH) };
 			GameState->TextureGroup[SubTextures].Flags = 0;
-			GameState->TextureGroup[SubTextures].Offset = v2{ 0.0f,0.0f };
+			GameState->TextureGroup[SubTextures].Offset = -V2(1.0f / GRID_PIXEL_LENGTH, 1.0F / GRID_PIXEL_LENGTH);
 			GameState->TextureGroup[SubTextures++].Tint = al_map_rgb(255, 255, 255);
 		}
 	}
 
-	GameState->TextureGroup[GRID_TEXTURE_A].Tint = al_map_rgba_f(0.4f, 0.4, 0.4, 1.0f);
-	GameState->TextureGroup[GRID_TEXTURE_B].Tint = al_map_rgba_f(0.4f, 0.4, 0.4, 1.0f);
+	//GameState->TextureGroup[GRID_A_ID].Tint = al_map_rgba_f(1.0f, 1.0, 1.0, 0.5f);
+	//GameState->TextureGroup[GRID_B_ID].Tint = al_map_rgba_f(0.4f, 0.4, 0.4, 1.0f);
+	//GameState->TextureGroup[CHEBYSHEV_BLOCK_ID].Rect.Size = GameState->TextureGroup[CHEBYSHEV_BLOCK_ID].Rect.Size;
+	//GameState->TextureGroup[CHEBYSHEV_BLOCK_ID].Offset = -V2(1.0f / GRID_PIXEL_LENGTH, 1.0F / GRID_PIXEL_LENGTH);
 
-	/*
-	enum bitmap_type {
-		ATLAS_TEXTURE,
-		METRICLESS_BLOCK_TEXTURE,
-		METRICLESS_WALL_TEXTURE,
-		EMPTY_TEXTURE,
-		CHEBYSHEV_WALL_TEXTURE_OFF,
-		CHEBYSHEV_BLOCK_TEXTURE,
-		GRID_TEXTURE_A,
-		PLAYER_TEXTURE,
-		GRID_TEXTURE_B
-	};
-	*/
+	//GameState->TextureGroup[CHEBYSHEV_WALL_ID].Region.Size = GameState->TextureGroup[CHEBYSHEV_WALL_ID].Region.Size - V2(1, 1);
+	//GameState->TextureGroup[CHEBYSHEV_WALL_ID].Region.P = GameState->TextureGroup[CHEBYSHEV_WALL_ID].Region.P + V2(1, 1);
+	//GameState->TextureGroup[METRICLESS_WALL_ID].Tint = al_map_rgba_f(0.0f, 0.0, 0.0, 1.0f);
+	//GameState->TextureGroup[METRICLESS_BLOCK_ID].Rect.Size = GameState->TextureGroup[METRICLESS_BLOCK_ID].Rect.Size + V2(2.0f / GRID_PIXEL_LENGTH, 2.0F / GRID_PIXEL_LENGTH);
+	//GameState->TextureGroup[METRICLESS_BLOCK_ID].Offset = -V2(1.0f / GRID_PIXEL_LENGTH, 1.0F / GRID_PIXEL_LENGTH);
 	
 
 
@@ -5465,7 +5704,8 @@ InitializeGame(FILE* Log,game_state* GameState)
 	}
 
 
-	GameState->EditorTileMap = EditorInit(GameState->EditorTileMap, i2{100,100}, 10, i2{ 32,32 }, 255, B2(GameState->Window.Rect));
+	GameState->EditorTileMap = EditorInit(GameState->EditorTileMap, i2{100,100}, 10, 
+		I2(GRID_PIXEL_LENGTH, GRID_PIXEL_LENGTH), 255, B2(GameState->Window.Rect));
 
 #endif
 
@@ -5479,14 +5719,39 @@ InitializeGame(FILE* Log,game_state* GameState)
 	//GameState->PreviousMove = i2{ 1,0 };
 
 
+	//TODO(ian): add freeze frame when blocks change type in midair!!!!!
+
+
 	//Number of puzzles in demo: ~8
 	//number of puzzles not in demo: ~18
 	//Progress: ~26/40 = 65%
+	
+	//TODO(ian): should blocks be able to push the player? 
+	//TODO(ian): there are alot of metricless floor levels; design some other types of levels
+	//TODO(iaN):design levels where the player is going up instead of falling down
+
 
 	//TODO(ian): Ideas for puzzles:
 	//1) rescue a block in a pit
 	//2) have an arch with three block height and two rows of blocks where you have the structure gain another row of height to traverse a gap
 	//3) a regular puzzle and then the same puzzle upside down both with different solutions (maybe already solved)
+	//4) have a puzzle that has an arch that is only 3 wide where the player can't move side to side, ie introduce them to the rule that blocks can't push the player
+	//5) entrap the player inside a 4x4 square of blocks(????)
+
+	/*
+	//NOTE(ian): puzzles grouped by category
+	TUTORIAL: sequence of 8
+	STARTING: sequence of 5
+	FALLING: sequence of 9
+	METRICLESS: sequence of 6
+	FLYING: sequence of 1?
+	*/
+
+	//NOTE(ian): ~25 puzzles total; trying to get up to 30 (or if I can 40)
+	//TODO(ian): make sure all levels are top quality!!!!
+
+	//TODO(ian): certain concepts aren't explored to their limits:
+	//such as, how the player can transmogrify a group of blocks by moving them against a metricless wall
 
 	//NOTE(ian): Beginning levels ~10 levels
 
@@ -5528,6 +5793,9 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"sxxxxxxxxxxxxxxs"
 	"ssssssssssssssss";
 
+
+
+	KEEP!!!!!
 	//NOTE(ian): need to see if there is another way to solve it
 	const char* Level =
 	"ssssssssssssssss"
@@ -5549,6 +5817,7 @@ InitializeGame(FILE* Log,game_state* GameState)
 
 
 
+	KEEP!!!!
 	/*
 	const char* Level =
 	"ssssssssssssssss"
@@ -5568,6 +5837,7 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"ssssssssssssssss";
 
 
+	KEEEP!!!!!
 	const char* Level =
 	"ssssssssssssssss"
 	"ssssssssssssssss"
@@ -5585,6 +5855,8 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"s..........xxxxs"
 	"ssssssssssssssss";
 
+
+	KEEP!!!!
 	const char* Level =
 	"ssssssssssssssss"
 	"ssssssssssssssss"
@@ -5626,6 +5898,7 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"ssssssssssssssss";
 
 
+	KEEP!!!!
 	const char* Level =
 	"ssssssssssssssss"
 	"s..............s"
@@ -5691,6 +5964,7 @@ InitializeGame(FILE* Log,game_state* GameState)
 
 	*/
 	/*
+	KEEP!!!!!
 	//NOTE(ian): this is pretty good. Keep/iterate upon this concept!!!
 	const char* Level =
 	"ssssssssssssssss"
@@ -5728,6 +6002,7 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"sx.........xxxxs"
 	"ssssssssssssssss";
 
+	KEEP!!!!!
 	const char* Level =
 	"ssssssssssssssss"
 	"s,,,,,,,,......s"
@@ -5767,12 +6042,16 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"ssssssssssssssss";
 
 
-
+	
+	
+	//NOTE(ian): does this level have anything interesting to say?
+	//might also be too similar to other levels
 	const char* Level =
+	//metricless floor 
+	"ssssssssssssssss"
 	"ssssssssssssssss"
 	"s..............s"
-	"s..............s"
-	"sx.......B.B.BPs"
+	"s........B.B.BPs"
 	"s.........xxxxxs"
 	"s.........sxxxxs"
 	"sD.D.D.D..sxxxxs"
@@ -5787,7 +6066,7 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"ssssssssssssssss";
 
 
-	
+	KEEP!!!
 	const char* Level =
 	"ssssssssssssssss"
 	"sxxxxxxsssssss.s"
@@ -5807,18 +6086,22 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"ssssxxxxxxxxxxss";
 
 
+	//TODO(ian): should the flying levels be the end?
+	//if so how many levels and how hard should they be?
+
+	KEEP!!!!
 	const char* Level =
 	"ssssssssssssssss"
 	"s.........xxxxxs"
 	"s..............s"
 	"sx.............s"
-	"s..............s"
-	"s..............s"
+	"sssssssssss....s"
+	"s.........xxxxs"
 	"s...........B..s"
 	"s..........B...s"
 	"s...........BP.s"
-	"s.......ssxxxxxs"
-	"s..............s"
+	"s.........xxxxxs"
+	"sssssssssss....s"
 	"s..............s"
 	"s..............s"
 	"s..............s"
@@ -5844,9 +6127,11 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"ssssssssssssssss";
 
 
+	
 	//NOTE(ian): this is pretty good. Maybe try to find better way of expressing it?
 	//Also make sure this is not trivially solved
 	const char* Level =
+	//metricless floor 
 	"ssssssssssssssss"
 	"s..............s"
 	"s..............s"
@@ -5865,8 +6150,9 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"ssssssssssssssss";
 	
 
-
+	KEEP!!!!
 	//NOTE(ian): this is really nice. Make sure there isn't a trivial way to solve it.
+	//NOTE(ian): if this puzzle leadss to a dead end then the level could be simplified 
 	const char* Level =
 	"ssssssssssssssss"
 	"s..............s"
@@ -5908,12 +6194,12 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"ssx......ss.ss.s"
 	"ssssssssssssssss";
 
-
+	KEEP!!!!
 	"ssssssssssssssss"
+	"ss......s......s"
 	"s.......s......s"
 	"s.......s......s"
-	"s..xxxxxxxxxx..s"
-	"s..x........x..s"
+	"s..xxxxxxxxxx.xs"
 	"s..s........x..s"
 	"s..s........x..s"
 	"x..s........x..s"
@@ -5927,23 +6213,46 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"ssssssssssssssss";
 
 
-	//NOTE(ian): make sure this is not trivially solved
+
+	
+	//TODO(ian): if the blocks can push the player this puzzle is ruined
 	const char* Level =
 	"ssssssssssssssss"
-	"s..............s"
-	"s..............s"
-	"s..............s"
-	"s..............s"
-	"sB.B.B.B.B.....s"
-	"sxxxxxxxx......s"
-	"ssssssBss......s"
-	"s......Bs......s"
-	"s......sB......s"
-	"s..............s"
-	"s..............s"
-	"s..............s"
-	"s..............s"
+	"s.............ss"
+	"s.............ss"
+	"s.............ss"
+	"s.............ss"
+	"s..B.B.B..B.B.ss"
+	"sxxxxxxxx..B..ss"
+	"ssssssBss.....ss"
+	"s......Bs.....ss"
+	"s......sB.....ss"
+	"s.............ss"
+	"s.............ss"
+	"s.............ss"
+	"s.............ss"
 	"sxxxsDDDDDDDDDDs"
+	"ssssssssssssssss";
+
+	//NOTE(ian): is this a better version of the puzzle above? yes
+	//also this might be too similar to the other puzzle about carrying blocks you went through
+	const char* Level =
+	//metricless floor
+	"ssssssssssssssss"
+	"s.............ss"
+	"s..B.B.B......ss"
+	"sxxxxxxxx.....ss"
+	"sssssssss.....ss"
+	"s.............ss"
+	"s.............ss"
+	"s.............ss"
+	"s.....DDDDDDDDss"
+	"s.....Dssssssss"
+	"s.....D........s"
+	"s.....D........s"
+	"s.....D........s"
+	"sDDDDDDDDDDD.xxs"
+	"ssssssssssssssss"
 	"ssssssssssssssss";
 
 
@@ -5951,6 +6260,7 @@ InitializeGame(FILE* Log,game_state* GameState)
 
 	//NOTE(ian): this is a good flying level; the player needs to make a specific shape:
 	//maybe think of a better way to tell the player they need that?
+	//TODO(ian): this level can be transfered to not flying. Should i do that?
 	const char* Level =
 	"sssssssssssssssssssssssssssssss"
 	"s...........D.................s"
@@ -5970,7 +6280,30 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"sssssssssssssssssssssssssssssss";
 
 
-	//NOTE(ian): another goodish flying level; make sure this is the best way to represent this puzzle
+	//NOTE(ian): when the player enters the puzzle there needs to be a blockade so they cannot take a three tall
+	//structure out and then back in
+	//NOTE(ian): this is very similar (visually) to a puzzle above; does removeing blocks help?
+	//metricless floor
+	"sssssssssssssssssssssssssssssss"
+	"s.......................xxxxsss"
+	"s.sssssssssssssssssssssssBxBsss"
+	"s.ss.....................BBxsss"
+	"s.ss.....................ssssss"
+	"s.ss.....................sxxxxs"
+	"s.ss............D.............s"
+	"s.ss..xx........D.............s"
+	"s.ss.Bxs........D.............s"
+	"ssss..xsDDDDDDDDDDDDDDD.......s"
+	"s....Bxssssssssssssssss.......s"
+	"s.....x.....D.....sssss.......s"
+	"s.....x.....D.....s...sssssssss"
+	"s..B..x.....D.....s...........s"
+	"sxxxxxx.......................s"
+	"sssssssssssssssssssssssssssssss";
+
+
+
+	//NOTE(ian): another goodish flying level; make sure this is the best way to present this puzzle
 	//NOTE(ian): idea for flying levels: make the rooms gignatic so it is incredibly obvious that you need to fly
 	const char* Level =
 	"sssssssssssssssssssssssssssssss"
@@ -5992,10 +6325,106 @@ InitializeGame(FILE* Log,game_state* GameState)
 
 
 
+	//NOTE(ian)L this is a decent level; is there any way to simplify it?
+	//the ideas is the you go over a pit but catch yourself with the block vehicle you made
+	//NOTE(ian): workshop this; the idea is that you hook into a crevice and "pull yourself" up
+	const char* Level =
+	//this level is broken because the player can fly
+	//metricless floor
+	"sssssssssssssssssssssssssssssss"
+	"s..............xBB............s"
+	"s..............Bx.............s"
+	"s..............Bs.............s"
+	"s.P.B.B.BB.....Bs.............s"
+	"sxxxxxxxxx.....Bs.............s"
+	"s........s.....ssssss........xs"
+	"s........s..........sssssssssxs"
+	"s........s...................xs"
+	"sx.......s...................xs"
+	"sx.......s.DDDDD..D..........xs"
+	"sx.......ssssssD..DDDDD.x....xs"
+	"sx............ssssssssssx.....s"
+	"sx............................s"
+	"sx............................s"
+	"sssssssssssssssssssssssssssssss";
 
-	//NOTE(ian): it is possible to have the player be a block; this is a simple introduction to that
-	//see if player block levels actually lead to something
-	//NOTE(Ian): there are a lot of repetitions and duds here. try to salvage something
+
+	KEEP!!!
+	//metricless floor
+	"sssssssssssssssssssssssssssssss"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"sssssssssssssssssssssssssssx..s"
+	"s........................xxx..s"
+	"s.............................s"
+	"sP............................s"
+	"sx.xBxBxBxBxxxxs..............s"
+	"sx.........x...sDDDDDDDDDDDDDDs"
+	"sxxxxxxxxxxx...ssssssssssssssss"
+	"s.............................s"
+	"s.............................s"
+	"sssssssssssssssssssssssssssssss";
+
+	KEEP!!!!!
+	//metricless floor
+	"sssssssssssssssssssssssssssssss"
+	"s.............sssssssssssssssss"
+	"s........B....................s"
+	"s.....BBB.....................s"
+	"sxxxxxxxx.....................s"
+	"s.......s.....................s"
+	"s.......s.....................s"
+	"s.......s.....................s"
+	"s.......sDDDDDD.DDDDD...DDD...s"
+	"s.......sssssss.sssssssssDs...s"
+	"s.............s.DDDDsssssDs...s"
+	"s.............xssssDDDDDDDs...s"
+	"s.................sssssssss...s"
+	"s.............................s"
+	"s.............................s"
+	"sssssssssssssssssssssssssssssss";
+	
+	//NOTE(ian):this level seems like it could be beaten by accident; try to fix that
+	"sssssssssssssssssssssssssssssss"
+	"s......x......................s"
+	"s.......x.....................s"
+	"s.B......x....................s"
+	"sx........xxxxxxxxxsssss......s"
+	"sxx.B..................s......s"
+	"sxxx...................sxssssss"
+	"sxxxx.B.......................s"
+	"sxxxxx........................s"
+	"sxxxxxxxxxxxsssssxxxxxxxs.s.sxs"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"sssssssssssssssssssssssssssssss";
+
+
+
+	"sssssssssssssssssssssssssssssss"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"sssssssssssssssssssssssssssssss";
+
+
 	const char* Level =
 	"ssssssssssssssss"
 	"s..............s"
@@ -6005,25 +6434,8 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"s..............s"
 	"s..............s"
 	"s..............s"
-	"s..P...........s"
-	"sxxxxx.xBxBxxxxs"
-	"s....x.....x...s"
-	"s....xxxxxxx...s"
 	"s..............s"
 	"s..............s"
-	"s..............s"
-	"ssssssssssssssss";
-
-	"ssssssssssssssss"
-	"s..............s"
-	"s..............s"
-	"s.....P........s"
-	"s......B......Ps"
-	"s.......xxxxxxxs"
-	"s.......x......s"
-	"s.......x......s"
-	"s.......x......s"
-	"sxxxxxxxx......s"
 	"s..............s"
 	"s..............s"
 	"s..............s"
@@ -6031,22 +6443,98 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"s..............s"
 	"ssssssssssssssss";
 
-	"ssssssssssssssss"
-	"s..............s"
-	"s..............s"
-	"s.....P........s"
-	"s......B..B...Ps"
-	"s.......xxxxxxxs"
-	"s.......x......s"
-	"s.......x......s"
-	"s.......x......s"
-	"sxxxx...x......s"
-	"s...xxxxx......s"
-	"s..............s"
-	"s..............s"
-	"s..............s"
-	"s..............s"
-	"ssssssssssssssss";
+
+	//NOTE(ian): BIG WORLD LEVELS:
+
+
+	"sssssssssssssssssssssssssssssss"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.s.s.s.s.s.s.s.s.sxs.s.s.s.s.s"
+	"s.............................s"
+	"s.....BBBB....................s"
+	"s.....BBBB....................s"
+	"ss....B..B....................s"
+	"ssxxxxx.xxxxxx.s.s.s.s.sxs.s.xs"
+	"s.....x......x................s"
+	"s.....xxxxxx.x................s"
+	"s..........x.x................s"
+	"s..........x.x................s"
+	"sssssssssssssssssssssssssssssss";
+
+
+	//TODO(ian): so for now I decided to have a giant world but have the puzzles be discrete objects
+	//you can restart them and so forth however any use of the blocks outside of the puzzles must
+	//not have situations where the player can be in an unwinnable scenario
+
+
+	//NOTE(ian): this is an adaptation of a blocks level; iterate, simplify
+	//TODO(ian): question:the huge big world puzzles are massive; is this even worth it?
+	//even the idea of the big world is very gimmicky and seems to distract from the rest of the game
+	//and if I make the decision to have blocks push the player there is a serious danger the player will discover it before they are supposed to
+	"ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss"
+	"sxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxBssssssssssssssssssssssssssss"
+	"sx.................................sB..........................s"
+	"sxBBBB.........................................................s"
+	"sxB..B.........................................................s"
+	"sxB.PB.........................................................s"
+	"sxBBBB.........................................................s"
+	"sx........................DDDD.................................s"
+	"sx........................DDDD.................................s"
+	"sx........................DDDD.................................s"
+	"sx........................DDDD.................................s"
+	"sxxxxxxxx...DDDDDDDDDDDDDDDDDDDDDDDDDDDD........xxxxxxxxxxxxxxxs"
+	"s.......s...ssssssssssssssssssssssssssss........ssssssssssssssss"
+	"s.......s...s..........................s........s..............s"
+	"s.......s...s..........................s........s..............s"
+	"s.......s...s..........................s........s..............s"
+	"ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss";
+
+	"ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"s..............................................................s"
+	"ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss";
+
+	"sssssssssssssssssssssssssssssss"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"sssssssssssssssssssssssssssssss";
 
 
 	const char* Level =
@@ -6056,33 +6544,10 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"s..............s"
 	"s..............s"
 	"s..............s"
-	"s..........b...s"
-	"sxxxx.....xxxxxs"
-	"s..............s"
-	"s.....BBB......s"
-	"s.....BPB......s"
-	"s.....BBB......s"
-	"s..............s"
-	"s..............s"
-	"s..............s"
-	"ssssssssssssssss";
-
-
-
-	//NOTE(ian): this is a really interesting idea
-	//the usual: make sure it's not trivially solved
-	//also: try to find more with the player blocks
-	const char* Level =
-	"ssssssssssssssss"
 	"s..............s"
 	"s..............s"
 	"s..............s"
 	"s..............s"
-	"s......P.......s"
-	"s.s....B...B.B.s"
-	"s.......B..xxxxs"
-	"sxxxxx...xxx...s"
-	"s....xxxxx.....s"
 	"s..............s"
 	"s..............s"
 	"s..............s"
@@ -6091,48 +6556,167 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"ssssssssssssssss";
 
 
-	//NOTE(ian): the power tower of player and chebyshev blocks
-	//see if there is anything interesting there
+
+
+
+	//NOTE(ian): BLOCK LEVELS
+	//TODO(ian): make more block levels and convert them to trapped-in-chebyshev-box puzzles (4x4 box?)
+
+
+
+	//TODO(ian): this accident is really fruitful. there is a lot of things to do with it. However, don't
+	//do anything now as that distracts
+
+	//NOTE(ian): this is a reprise of one of the tutorial levels; also reprise almost the entire tutorial level 
 	const char* Level =
 	"ssssssssssssssss"
 	"s..............s"
-	"s......P.......s"
-	"s......B.......s"
-	"s......P.......s"
-	"s......B.......s"
-	"s......P.......s"
-	"s......B.......s"
+	"sx.............s"
+	"sx.............s"
+	"s..s...........s"
+	"s..s...........s"
+	"s..s...........s"
+	"s..s...........s"
+	"sx.............s"
+	"sxB............s"
+	"sx.............s"
+	"sx....B........s"
 	"sxxxxxxxxxxxxxxs"
 	"s..............s"
 	"s..............s"
-	"s..............s"
-	"s..............s"
-	"s..............s"
-	"s..............s"
 	"ssssssssssssssss";
-
-	//NOTE(ian):idea for a puzzle: a puzzle where you need to drop a player block
 
 
 	const char* Level =
 	"ssssssssssssssss"
-	"s..........s..xs"
-	"ssssxxxxxxxx..xs"
-	"s.......B.....xs"
-	"s.......P.....xs"
-	"s.............xs"
-	"s.............xs"
-	"s.............xs"
-	"s.............xs"
 	"s..............s"
-	"sxxxxssssssxxxxs"
+	"sx.............s"
+	"sx.............s"
 	"s..............s"
 	"s..............s"
+	"s..............s"
+	"s.B............s"
+	"sx.............s"
+	"sxx............s"
+	"sxxx...........s"
+	"sxxxxB.........s"
+	"sxxxxxxxxxxxxxxs"
+	"s..............s"
+	"s..............s"
+	"ssssssssssssssss";
+
+	const char* Level =
+	"ssssssssssssssss"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s........x.....s"
+	"s........x.....s"
+	"s........s.....s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s...x.....x....s"
+	"s..Bx..x..x....s"
+	"s..............s"
+	"s............P.s"
+	"sxxxxxxBxxxxxxxs"
+	"ssssssssssssssss";
+
+
+	const char* Level =
+	"ssssssssssssssss"
+	"sxB............s"
+	"s..............s"
+	"sB.B...........s"
+	"sxx............s"
+	"s.s............s"
+	"s.s............s"
+	"s.s............s"
+	"s.sDDDD..DDDDDDs"
+	"sssssss..sssssss"
+	"s.....s..s.....s"
+	"s.....s..s.....s"
+	"s.....ssss.....s"
 	"s..............s"
 	"s..............s"
 	"ssssssssssssssss";
 
 
+	const char* Level =
+	"ssssssssssssssss"
+	"ssssssss.......s"
+	"sxB....s.......s"
+	"s......s.......s"
+	"s..B...s.......s"
+	"sxxxx..s.......s"
+	"s...s..s.......s"
+	"s...s..s.......s"
+	"s...s..s.......s"
+	"s...s..........s"
+	"s...s..sxxxxxxxs"
+	"s...ssxsssssssss"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"ssssssssssssssss";
+
+	//NOTE(ian): not a puzzle but an interesting consequence to the rules; maybe a joke?
+	const char* Level =
+	"ssssssssssssssss"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s.....xxx......s"
+	"s.....x.x......s"
+	"s.....x..B.....s"
+	"s.....x.xxxxxxxs"
+	"s.....x.x......s"
+	"s.....xBx......s"
+	"sB......x......s"
+	"sxxxxxxBx......s"
+	"sssssssss......s"
+	"s..............s"
+	"ssssssssssssssss";
+
+
+	//TODO(ian): convert this to trapped-in-chebyshev-box puzzle
+	//TODO(ian): this is too complicated; need to simplify; the basic idea is that you make a block chebyshev while others revert back
+	"sssssssssssssssssssssssssssssss"
+	"sxxxxxxxxxxxxxxxxxxxs.........s"
+	"sx..................sss.......s"
+	"sx....................sss.....s"
+	"sx......................sss...s"
+	"sx........................sss.s"
+	"sx..........................sss"
+	"sx............................s"
+	"s........D....................s"
+	"sxxx.DDDDDD.DDDD..............s"
+	"sssssssssssssssDDD............s"
+	"s.............ssDDD...........s"
+	"s..............sssDDD.........s"
+	"s................sssDDD.xxxxxxs"
+	"s..................ssssssssssss"
+	"sssssssssssssssssssssssssssssss";
+
+
+	"sssssssssssssssssssssssssssssss"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"s.............................s"
+	"sssssssssssssssssssssssssssssss";
 
 	const char* Level =
 	"ssssssssssssssss"
@@ -7060,7 +7644,7 @@ InitializeGame(FILE* Log,game_state* GameState)
 	fprintf(Log, "Loading \'world_map.txt\'...");
 	ALLEGRO_FILE* F = al_fopen("levels\\world_map.txt", "r");
 	if (F == NULL)
-	{
+	{ 
 		fprintf(Log, "Failed: Couldn't open file.");
 		return -1;
 	}
@@ -7111,6 +7695,7 @@ InitializeGame(FILE* Log,game_state* GameState)
 
 	fprintf(Log, "Successful\n");
 
+	/*
 	s32 HalfNumRows = (GameState->Level.LevelSize.Y / 2);
 	for (s32 Y = 0;
 		Y < HalfNumRows;
@@ -7127,6 +7712,7 @@ InitializeGame(FILE* Log,game_state* GameState)
 			GameState->Level.Immutables[BottomIndex] = Temp;
 		}
 	}
+	*/
 
 	GameState->Level.NumMutables = 0;
 	for (s32 I = 0;
@@ -7204,7 +7790,8 @@ main(int argc, char **argv)
 	ALLEGRO_DISPLAY *Display = NULL;
 
 	al_set_new_display_option(ALLEGRO_SAMPLE_BUFFERS, 1, ALLEGRO_REQUIRE);
-	al_set_new_display_option(ALLEGRO_SAMPLES, 2, ALLEGRO_REQUIRE);
+	al_set_new_display_option(ALLEGRO_SAMPLES, 8, ALLEGRO_REQUIRE);
+	//al_set_new_display_option(ALLEGRO_DEPTH_SIZE, 16, ALLEGRO_REQUIRE);
 	//al_set_new_display_option(ALLEGRO_COLOR_SIZE, 32, ALLEGRO_REQUIRE);
 	//al_set_new_display_option(ALLEGRO_DEPTH_SIZE, 16, ALLEGRO_REQUIRE);
 	al_set_new_display_flags(ALLEGRO_WINDOWED);

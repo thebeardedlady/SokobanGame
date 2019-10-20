@@ -5152,7 +5152,9 @@ UpdateCamera(game_state* GameState, level Level, camera *Camera)
 	v2 NewScreenP = Lerp(Camera->CenterPos,0.1f, (GameState->Level.Mutables[0].Rect.P + GameState->Level.Mutables[0].Rect.Size*0.5f));
 	v2 Diff = NewScreenP - Camera->CenterPos;
 	
-	r2 LevelRect = R2(Camera->Dim*0.5f, V2(Level.LevelSize) - Camera->Dim);
+	v2 CameraSize = HadamardDiv(Camera->Dim, Camera->Scale);
+
+	r2 LevelRect = R2(CameraSize*0.5f, V2(Level.LevelSize) - CameraSize);
 	//NOTE(ian): this is for the newline characters at the right side of the level
 	LevelRect.Size.X -= 1.0f;
 
@@ -5570,7 +5572,7 @@ s32
 InitializeGame(FILE* Log,game_state* GameState)
 {
 	GameState->Camera.Dim = HadamardDiv(GameState->Camera.Window.Size, v2{ GRID_PIXEL_LENGTH,GRID_PIXEL_LENGTH });
-	GameState->Camera.Scale = v2{ 1.0f,1.0f };
+	GameState->Camera.Scale = v2{ 2.0f,2.0f };
 	GameState->AgainTime = 0.0f;
 	Seed(&GameState->PRNG, 100);
 	GameState->InEditor = false;
@@ -5579,7 +5581,7 @@ InitializeGame(FILE* Log,game_state* GameState)
 	fprintf(Log, "\nLoading Textures...");
 
 
-	const char* ArtAsset[NUM_TEXTURES] = { "art\\sheepwreckedblocks2.png" };
+	const char* ArtAsset[NUM_TEXTURES] = { "art\\sheepwreckedblocks3.png" };
 
 
 	for (s32 I = 0;
@@ -5897,7 +5899,7 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"s,,,,,,,,......s"
 	"s..............s"
 	"s..............s"
-	"sP....B.B......s"
+	"sP....BB.......s"
 	"sxxxxxxxx......s"
 	"sxxxxxbbb......s"
 	"sxxxxxbxx......s"
@@ -5990,6 +5992,29 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"ss.s...........s"
 	"ss.s...........s"
 	"ssssssssssssssss";
+
+
+	//NOTE(ian): this is a better version of the puzzle above;
+	//also this should teach that regular blocks can go on top of metricless blocks
+	//this should go after teaching about metriclessness
+	//also make sure this is not trivially solved
+	//maybe link this one to that other puzzle?
+	"sssssssssssssssssssssssssssssss"
+	"s............s................s"
+	"s............s................s"
+	"s...BBBB.....s................s"
+	"sxxxxxxx.....ssssssssssssssssss"
+	"s......s......................s"
+	"s......s......................s"
+	"s......s......................s"
+	"s......s...D.D.D.D.D.D.D.D....s"
+	"s......s.s.s.s.s.s.s.s.s.s.xxxs"
+	"s......s......................s"
+	"s......s......................s"
+	"s......s......................s"
+	"s......s......................s"
+	"s......s......................s"
+	"sssssssssssssssssssssssssssssss";
 
 
 	KEEP!!!
@@ -6384,6 +6409,30 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"s...xxBx.......s"
 	"ssssssssssssssss";
 
+	//TODO(ian): in general need to find more unique ways to assemble the blocks into the required shapes
+
+
+	//NOTE(ian): this has a decent idea but is it possible?
+	//
+	"sssssssssssssssssssssssssssssss"
+	
+	"sssssssssssssssssssssssssssssss"
+	"s...........sss...............s"
+	"s...........sss...............s"
+	"sB.B.BB.....sss...............s"
+	"sxxxxxx.....sss.....xxxxxxxxxxs"
+	"s.....s.....sss.....s.........s"
+	"s.....s.....sss.....s.........s"
+	"s.....s.....sss.....s.........s"
+	"s.....s.............s.........s"
+	"s.....s.............s.........s"
+	"s.....s.....xxx.....s.........s"
+	"s.....s.....sss.....s.........s"
+	"s.....s.....sss.....s.........s"
+	"s.....s.....sss.....s.........s"
+	"s.....sssssssssssssss.........s"
+	"sssssssssssssssssssssssssssssss";
+
 
 
 	///NOTE(ian): trivial but can I make somtheing out of this?
@@ -6402,6 +6451,26 @@ InitializeGame(FILE* Log,game_state* GameState)
 	"s......xx..B...s"
 	"s.........B....s"
 	"s........B.....s"
+	"ssssssssssssssss";
+
+
+	//NOTE(ian): just something to indiciate how gravity works; is it needed? Not at the moment
+	const char* Level =
+	"ssssssssssssssss"
+	"sx.............s"
+	"s.B............s"
+	"s.B.B..........s"
+	"s.B.B.B........s"
+	"s.BsBsBsBs.....s"
+	"s.BBBBBBBBB....s"
+	"s..............s"
+	"ss.s.s.s.s.s...s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"s..............s"
+	"ss.s.s.s.s.....s"
+	"ssxsxsxsxsxsxxxs"
 	"ssssssssssssssss";
 
 	"sssssssssssssssssssssssssssssss"
